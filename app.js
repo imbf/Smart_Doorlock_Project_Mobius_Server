@@ -1249,6 +1249,8 @@ function lookup_create(request, response) {
                     //JONGJIN DEFINED
                     if(request.targetObject.cnt.rn === 'keypad'){   //request.targetObject.cnt.rn 에 aeName이 저장되어 있따. (분기처리할 때 사용)
                         console.log('keypad 동작');
+                        console.log(body_Obj.cin.con);
+                        /*
                         doorlockdb.query(`(SELECT password FROM password ORDER BY time DESC LIMIT 1)
                         UNION (SELECT disposablepassword FROM smsservice WHERE activetime<=now() AND unactivetime>=now() AND opennumber=0)
                         `, (error, result, fields) => {
@@ -1262,6 +1264,7 @@ function lookup_create(request, response) {
                                 }
                             }
                         });
+                        */
                     }
                 }
                 else if ((request.ty == 24) && (parentObj.ty == 2 || parentObj.ty == 3 || parentObj.ty == 4 || parentObj.ty == 29)) { // semanticDescriptor
@@ -2255,7 +2258,6 @@ app.get(onem2mParser, function (request, response) {
             // }
         }
         else {
-            console.log("하이종진 8888888888888888888888888888888");
             responder.error_result(request, response, 400, 4000, 'BAD_REQUEST (rcn or fu query is not supported at GET request)');
         }
     // });
