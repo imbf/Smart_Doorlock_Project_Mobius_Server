@@ -461,7 +461,7 @@ if (use_clustering) {
             console.log('worker' + worker.pid + ' died --> start again');
             cluster.fork();
         });
-
+        console.log("하이종진 1111111111111111111111");
         db.connect(usedbhost, 3306, 'root', usedbpass, function (rsc) {
             if (rsc == '1') {
                 db_sql.set_tuning(function (err, results) {
@@ -486,7 +486,7 @@ if (use_clustering) {
                         require('./pxy_ws');
                         require('./sgn_man');
                         require('./cnt_man');
-
+                        console.log("하이종진 2222222222222222222");
                         if (usecsetype == 'mn' || usecsetype == 'asn') {
                             global.refreshIntervalId = setInterval(function () {
                                 csr_custom.emit('register_remoteCSE');
@@ -532,6 +532,7 @@ if (use_clustering) {
         // });
 
         db.connect(usedbhost, 3306, 'root', usedbpass, function (rsc) {
+            console.log("하이종진 3333333333333333333333");
             if (rsc == '1') {
                 if(use_secure === 'disable') {
                     http.globalAgent.maxSockets = 1000000;
@@ -651,11 +652,9 @@ function make_short_nametype(body_Obj) {
         }
         delete body_Obj[Object.keys(body_Obj)[0]]['$'];
     }
-
     var rootnm = Object.keys(body_Obj)[0].split(':')[1];
     body_Obj[rootnm] = body_Obj[Object.keys(body_Obj)[0]];
     delete body_Obj[Object.keys(body_Obj)[0]];
-
     for (var attr in body_Obj[rootnm]) {
         if (body_Obj[rootnm].hasOwnProperty(attr)) {
             if (typeof body_Obj[rootnm][attr] === 'boolean') {
@@ -2211,11 +2210,13 @@ app.get(onem2mParser, function (request, response) {
     //     fullBody += chunk.toString();
     // });
     // request.on('end', function () {
+        console.log("하이종진 44444444444444444444444444444444444");
         if (request.headers.hasOwnProperty('binding')) {
             updateHitCount(request.headers['binding']);
         }
         else {
             updateHitCount('H');
+            console.log("하이종진 5555555555555555555555555555555555");            
         }
 
         //request.body = fullBody;
@@ -2247,7 +2248,9 @@ app.get(onem2mParser, function (request, response) {
             //     }
             // }
             // else {
+                console.log("하이종진 666666666666666666666666666666666");
                 lookup_retrieve(request, response);
+                console.log("하이종진 777777777777777777777777777777777");
             // }
         }
         else {
