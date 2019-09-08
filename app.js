@@ -1249,14 +1249,12 @@ function lookup_create(request, response) {
                     //JONGJIN DEFINED
                     if(request.targetObject.cnt.rn === 'keypad'){   //request.targetObject.cnt.rn 에 aeName이 저장되어 있따. (분기처리할 때 사용)
                         console.log('keypad 동작');
-                        console.log(body_Obj.cin.con);
-                        /*
                         doorlockdb.query(`(SELECT password FROM password ORDER BY time DESC LIMIT 1)
                         UNION (SELECT disposablepassword FROM smsservice WHERE activetime<=now() AND unactivetime>=now() AND opennumber=0)
                         `, (error, result, fields) => {
                             console.log(result);
                             for(var i=0;i< result.length;i++){
-                                if(result[i].password === body_Obj.cin.con){
+                                if(result[i].password === body_Ob.cin.con){
                                     Mrequest(Servooptions);
                                     if(i!=0){
                                         doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
@@ -1264,7 +1262,6 @@ function lookup_create(request, response) {
                                 }
                             }
                         });
-                        */
                     }
                 }
                 else if ((request.ty == 24) && (parentObj.ty == 2 || parentObj.ty == 3 || parentObj.ty == 4 || parentObj.ty == 29)) { // semanticDescriptor
