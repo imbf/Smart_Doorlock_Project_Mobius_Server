@@ -2254,6 +2254,7 @@ app.get(onem2mParser, function (request, response) {
             // }
         }
         else {
+            console.log("하이종진 8888888888888888888888888888888");
             responder.error_result(request, response, 400, 4000, 'BAD_REQUEST (rcn or fu query is not supported at GET request)');
         }
     // });
