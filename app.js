@@ -1,0 +1,2614 @@
+/**
+ * Copyright (c) 2018, KETI
+ * All rights reserved.
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+ * 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products derived from this software without specific prior written permission.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/**
+ * @file Main code of Mobius. Role of flow router
+ * @copyright KETI Korea 2018, KETI
+ * @author Il Yeup Ahn [iyahn@keti.re.kr]
+ */
+
+process.env.NODE_ENV = 'production';
+//process.env.NODE_ENV = 'development';
+
+var fs = require('fs');
+var http = require('http');
+var express = require('express');
+var bodyParser = require('body-parser');
+var morgan = require('morgan');
+var util = require('util');
+var xml2js = require('xml2js');
+var url = require('url');
+var xmlbuilder = require('xmlbuilder');
+var ip = require('ip');
+var crypto = require('crypto');
+var fileStreamRotator = require('file-stream-rotator');
+var merge = require('merge');
+var https = require('https');
+var cbor = require('cbor');
+var moment = require('moment');
+
+//JongJin Defined
+const mysql = require('mysql');
+var doorlockdb = mysql.createConnection({
+    host: 'localhost',
+    user: 'root',
+    password: '111111',
+    database: 'doorlockdb'
+})
+
+//JongJin Defined
+
+const Mrequest = require('request');
+var mqtt = require('mqtt');
+
+var Servooptions = {
+    uri:'http://192.168.0.33:7579/Mobius/lock/update',  
+    method: 'POST',
+    followRedirect:true,
+    maxRedirects:10,
+    headers:{
+        'Accept': 'application/json',
+        'X-M2M-RI': 12345,
+        'X-M2M-Origin': 'JongJin',
+        'Content-Type': 'application/vnd.onem2m-res+json; ty=4',
+    },
+    body:{
+        "m2m:cin":{
+            "con":"123" //별 다른 의미가 없는 content 이다.
+        }
+    },
+    json:true
+}
+
+
+//global.noti_mqtt = null;
+
+global.NOPRINT = 'true';
+global.ONCE = 'true';
+
+var cb = require('./mobius/cb');
+var responder = require('./mobius/responder');
+var resource = require('./mobius/resource');
+var security = require('./mobius/security');
+var fopt = require('./mobius/fopt');
+var tr = require('./mobius/tr');
+var sgn = require('./mobius/sgn');
+
+var db = require('./mobius/db_action');
+var db_sql = require('./mobius/sql_action');
+
+// ������ �����մϴ�.
+var app = express();
+
+global.usespid              = '//keti.re.kr';
+global.usesuperuser         = 'Superman';
+
+global.useobserver          = 'Sandwich';
+
+global.resultStatusCode = {
+    '4230': "LOCKED: this resource was occupied by others",
+    '4103': "ACCESS DENIED"
+};
+
+global.randomValueBase64 = function (len) {
+    return crypto.randomBytes(Math.ceil(len * 3 / 4))
+        .toString('base64')   // convert to base64 format
+        .slice(0, len)        // return required number of characters
+        .replace(/\+/g, '0')  // replace '+' with '0'
+        .replace(/\//g, '0'); // replace '/' with '0'
+};
+
+global.randomIntInc = function (low, high) {
+    return Math.floor(Math.random() * (high - low + 1) + low);
+};
+
+global.randomValue = function (qty) {
+    return crypto.randomBytes(qty).toString(2);
+};
+
+var logDirectory = __dirname + '/log';
+
+// ensure log directory exists
+fs.existsSync(logDirectory) || fs.mkdirSync(logDirectory);
+
+// create a rotating write stream
+var accessLogStream = fileStreamRotator.getStream({
+    date_format: 'YYYYMMDD',
+    filename: logDirectory + '/access-%DATE%.log',
+    frequency: 'daily',
+    verbose: false
+});
+
+// setup the logger
+app.use(morgan('combined', {stream: accessLogStream}));
+//ts_app.use(morgan('short', {stream: accessLogStream}));
+
+function del_req_resource() {
+    db_sql.delete_req(function (err, delete_Obj) {
+        if(!err) {
+            console.log('deleted ' + delete_Obj.affectedRows + ' request resource(s).');
+        }
+    });
+}
+
+function del_expired_resource() {
+    // this routine is that delete resource expired time exceed et of resource
+    var et = moment().utc().format('YYYYMMDDTHHmmss');
+    db_sql.delete_lookup_et(et, function (err) {
+        if(!err) {
+            console.log('---------------');
+            console.log('delete resources expired et');
+            console.log('---------------');
+        }
+    });
+}
+//
+// function noti_mqtt_begin() {
+//     if(noti_mqtt == null) {
+//         if(use_secure === 'disable') {
+//             noti_mqtt = mqtt.connect('mqtt://' + use_mqtt_broker + ':' + use_mqtt_port);
+//         }
+//         else {
+//             var connectOptions = {
+//                 host: use_mqtt_broker,
+//                 port: use_mqtt_port,
+//                 protocol: "mqtts",
+//                 keepalive: 15,
+//                 //             clientId: serverUID,
+//                 protocolId: "MQTT",
+//                 protocolVersion: 4,
+//                 clean: true,
+//                 reconnectPeriod: 2000,
+//                 connectTimeout: 2000,
+//                 key: fs.readFileSync("./server-key.pem"),
+//                 cert: fs.readFileSync("./server-crt.pem"),
+//                 rejectUnauthorized: false
+//             };
+//             noti_mqtt = mqtt.connect(connectOptions);
+//         }
+//
+//         noti_mqtt.on('connect', function () {
+//             console.log('noti_mqtt is connected');
+//         });
+//
+//         noti_mqtt.on('message', sgn.response_noti_handler);
+//     }
+// }
+
+var cluster = require('cluster');
+var os = require('os');
+//var cpuCount = (os.cpus().length / 2);
+var cpuCount = os.cpus().length;
+
+var worker = [];
+// var ss_ri_cache = {};
+//
+// global.get_ss_ri_cache = function (name) {
+//     return ss_ri_cache[name];
+// };
+//
+// global.get_all_ss_ri_cache = function () {
+//     return ss_ri_cache;
+// };
+//
+// global.set_ss_ri_cache = function (name, val) {
+//     ss_ri_cache[name] = val;
+//
+//     if ( cluster.isWorker ) {
+//         process.send({
+//             cmd: 'ss_ri:edit-request',
+//             name: name,
+//             val: val
+//         });
+//     }
+//     else {
+//         broadcast_ss_ri_cache();
+//     }
+// };
+//
+// global.del_ss_ri_cache = function (name) {
+//     delete ss_ri_cache[name];
+//
+//     if ( cluster.isWorker ) {
+//         process.send({
+//             cmd: 'ss_ri:del-request',
+//             name: name
+//         });
+//     }
+//     else {
+//         broadcast_ss_ri_cache();
+//     }
+// };
+//
+// function broadcast_ss_ri_cache() {
+//     if ( cluster.isMaster ) {
+//         for (var id in cluster.workers) {
+//             if(cluster.workers.hasOwnProperty(id)) {
+//                 var worker = cluster.workers[id];
+//
+//                 worker.send({
+//                     cmd: 'ss_ri:edit',
+//                     data: ss_ri_cache
+//                 });
+//             }
+//         }
+//     }
+//     else {
+//         process.send({
+//             cmd: 'ss_ri:broadcast'
+//         });
+//     }
+// }
+//
+// global.cbs_cache = {};
+//
+// global.set_cbs_cache = function (name, val) {
+//     cbs_cache[name] = val;
+//
+//     if ( cluster.isWorker ) {
+//         process.send({
+//             cmd: 'cbs:broadcast_set',
+//             name: name,
+//             val: val
+//         });
+//     }
+//     else {
+//         broadcast_set_cbs_cache(name, val);
+//     }
+// };
+//
+// function broadcast_set_cbs_cache(name, val) {
+//     if ( cluster.isMaster ) {
+//         for (var id in cluster.workers) {
+//             if(cluster.workers.hasOwnProperty(id)) {
+//                 var worker = cluster.workers[id];
+//
+//                 worker.send({
+//                     cmd: 'cbs:edit_set',
+//                     name: name,
+//                     val: val
+//                 });
+//             }
+//         }
+//     }
+//     else {
+//         process.send({
+//             cmd: 'cbs:broadcast_set'
+//         });
+//     }
+// }
+//
+// global.del_cbs_cache = function (name) {
+//     delete cbs_cache[name];
+//
+//     if ( cluster.isWorker ) {
+//         process.send({
+//             cmd: 'cbs:broadcast',
+//             name: name
+//         });
+//     }
+//     else {
+//         broadcast_cbs_cache();
+//     }
+// };
+//
+// function broadcast_cbs_cache() {
+//     if ( cluster.isMaster ) {
+//         for (var id in cluster.workers) {
+//             if(cluster.workers.hasOwnProperty(id)) {
+//                 var worker = cluster.workers[id];
+//
+//                 worker.send({
+//                     cmd: 'cbs:edit',
+//                     data: cbs_cache
+//                 });
+//             }
+//         }
+//     }
+//     else {
+//         process.send({
+//             cmd: 'cbs:broadcast'
+//         });
+//     }
+// }
+//
+// var hit_cache = {};
+//
+// global.get_hit_cache = function (name) {
+//     return hit_cache[name];
+// };
+//
+// global.get_all_hit_cache = function () {
+//     return hit_cache;
+// };
+//
+// global.set_hit_cache = function (name, val) {
+//     hit_cache[name] = val;
+//
+//     if ( cluster.isWorker ) {
+//         process.send({
+//             cmd: 'hit:broadcast_set',
+//             name: name,
+//             val: val
+//         });
+//     }
+//     else {
+//         broadcast_set_hit_cache(name, val);
+//     }
+// };
+//
+// function broadcast_set_hit_cache(name, val) {
+//     if ( cluster.isMaster ) {
+//         for (var id in cluster.workers) {
+//             if(cluster.workers.hasOwnProperty(id)) {
+//                 var worker = cluster.workers[id];
+//
+//                 worker.send({
+//                     cmd: 'hit:edit_set',
+//                     name: name,
+//                     val: val
+//                 });
+//             }
+//         }
+//     }
+//     else {
+//         process.send({
+//             cmd: 'hit:broadcast_set'
+//         });
+//     }
+// }
+//
+// function broadcast_hit_cache() {
+//     if ( cluster.isMaster ) {
+//         for (var id in cluster.workers) {
+//             if(cluster.workers.hasOwnProperty(id)) {
+//                 var worker = cluster.workers[id];
+//
+//                 worker.send({
+//                     cmd: 'hit:edit',
+//                     data: hit_cache
+//                 });
+//             }
+//         }
+//     }
+//     else {
+//         process.send({
+//             cmd: 'hit:broadcast'
+//         });
+//     }
+// }
+
+var use_clustering = 1;
+var worker_init_count = 0;
+if (use_clustering) {
+    if (cluster.isMaster) {
+        // cluster.on('message', function(worker, message) {
+        //     // if(message.cmd === 'init:notify' ) {
+        //     //     worker_init_count++;
+        //     //     if(worker_init_count >= cpuCount) {
+        //     //         // try {
+        //     //         //     var hitStr = fs.readFileSync('hit.json', 'utf8');
+        //     //         //     hit_cache = JSON.parse(hitStr);
+        //     //         //
+        //     //         //     var moment = require('moment');
+        //     //         //     var a = moment().utc();
+        //     //         //     var cur_t = a.format('YYYYMMDD');
+        //     //         //     if (!hit_cache.hasOwnProperty(cur_t)) {
+        //     //         //         hit_cache[cur_t] = [];
+        //     //         //         for (var h = 0; h < 24; h++) {
+        //     //         //             hit_cache[cur_t].push({});
+        //     //         //         }
+        //     //         //     }
+        //     //         //     broadcast_hit_cache();
+        //     //         // }
+        //     //         // catch (e) {
+        //     //         //     moment = require('moment');
+        //     //         //     a = moment().utc();
+        //     //         //     cur_t = a.format('YYYYMMDD');
+        //     //         //     if (!hit_cache.hasOwnProperty(cur_t)) {
+        //     //         //         hit_cache[cur_t] = [];
+        //     //         //         for (h = 0; h < 24; h++) {
+        //     //         //             hit_cache[cur_t].push({});
+        //     //         //         }
+        //     //         //     }
+        //     //         //     broadcast_hit_cache();
+        //     //         // }
+        //     //
+        //     //         //cbs_cache = {};
+        //     //         //broadcast_cbs_cache();
+        //     //     }
+        //     // }
+        //     // else if(message.cmd === 'ss_ri:edit-request' ) {
+        //     //     ss_ri_cache[message.name] = message.val;
+        //     //     broadcast_ss_ri_cache();
+        //     // }
+        //     // else if(message.cmd === 'ss_ri:del-request' ) {
+        //     //     delete ss_ri_cache[message.name];
+        //     //     broadcast_ss_ri_cache();
+        //     // }
+        //     // else if (message.cmd === 'ss_ri:broadcast') {
+        //     //     broadcast_ss_ri_cache();
+        //     // }
+        //     // else if(message.cmd === 'cbs:broadcast_set' ) {
+        //     //     cbs_cache[message.name] = message.val;
+        //     //     //console.log(message.name + ' : ' + JSON.stringify(cbs_cache[message.name]));
+        //     //     broadcast_set_cbs_cache(message.name, message.val);
+        //     // }
+        //     // else if (message.cmd === 'cbs:broadcast') {
+        //     //     delete cbs_cache[message.name];
+        //     //     broadcast_cbs_cache();
+        //     // }
+        //     // else if (message.cmd === 'hit:broadcast_set') {
+        //     //     hit_cache[message.name] = message.val;
+        //     //     //console.log(message.name + ' : ' + JSON.stringify(hit_cache[message.name]));
+        //     //     fs.writeFileSync('hit.json', JSON.stringify(hit_cache, null, 4), 'utf8');
+        //     //     broadcast_set_hit_cache(message.name, message.val);
+        //     // }
+        //     // else if (message.cmd === 'hit:broadcast') {
+        //     //     delete hit_cache[message.name];
+        //     //     broadcast_hit_cache();
+        //     // }
+        // });
+
+        cluster.on('death', function (worker) {
+            console.log('worker' + worker.pid + ' died --> start again');
+            cluster.fork();
+        });
+
+        db.connect(usedbhost, 3306, 'root', usedbpass, function (rsc) {
+            if (rsc == '1') {
+                db_sql.set_tuning(function (err, results) {
+                    if(err) {
+                        console.log('[set_tuning] error');
+                    }
+
+                    console.log('CPU Count:', cpuCount);
+                    for (var i = 0; i < cpuCount; i++) {
+                        worker[i] = cluster.fork();
+                    }
+
+                    cb.create(function (rsp) {
+                        console.log(JSON.stringify(rsp));
+
+                        wdt.set_wdt(require('shortid').generate(), 43200, del_req_resource);
+                        wdt.set_wdt(require('shortid').generate(), 86400, del_expired_resource);
+
+                        require('./hit_man');
+                        require('./pxy_mqtt');
+                        require('./pxy_coap');
+                        require('./pxy_ws');
+                        require('./sgn_man');
+                        require('./cnt_man');
+
+                        if (usecsetype == 'mn' || usecsetype == 'asn') {
+                            global.refreshIntervalId = setInterval(function () {
+                                csr_custom.emit('register_remoteCSE');
+                            }, 5000);
+                        }
+                    });
+                });
+            }
+        });
+    }
+    else {
+        //   app.use(bodyParser.urlencoded({ extended: true }));
+        //   app.use(bodyParser.json({limit: '1mb', type: 'application/*+json' }));
+        //   app.use(bodyParser.text({limit: '1mb', type: 'application/*+xml' }));
+
+        // process.send({
+        //     cmd: 'init:notify'
+        // });
+
+        // process.on('message', function (message) {
+        //     // if (message.cmd === 'ss_ri:edit') {
+        //     //     //ss_ri_cache[message.name] = message.val;
+        //     //     ss_ri_cache = message.data;
+        //     //     //console.log(ss_ri_cache);
+        //     // }
+        //     // else if (message.cmd === 'cbs:edit_set') {
+        //     //     cbs_cache[message.name] = message.val;
+        //     //     //console.log(message.val);
+        //     // }
+        //     // else if (message.cmd === 'cbs:edit') {
+        //     //     //cbs_cache[message.name] = message.val;
+        //     //     cbs_cache = message.data;
+        //     //     //console.log(cbs_cache);
+        //     // }
+        //     // if (message.cmd === 'hit:edit_set') {
+        //     //     hit_cache[message.name] = message.val;
+        //     //     //console.log(message.val);
+        //     // }
+        //     // else if (message.cmd === 'hit:edit') {
+        //     //     hit_cache = message.data;
+        //     //     //console.log(hit_cache);
+        //     // }
+        // });
+
+        db.connect(usedbhost, 3306, 'root', usedbpass, function (rsc) {
+            if (rsc == '1') {
+                if(use_secure === 'disable') {
+                    http.globalAgent.maxSockets = 1000000;
+                    http.createServer(app).listen({port: usecsebaseport, agent: false}, function () {
+                        console.log('mobius server (' + ip.address() + ') running at ' + usecsebaseport + ' port');
+                        cb.create(function (rsp) {
+                            console.log(JSON.stringify(rsp));
+                            //noti_mqtt_begin();
+                        });
+                    });
+                }
+                else {
+                    var options = {
+                        key: fs.readFileSync('server-key.pem'),
+                        cert: fs.readFileSync('server-crt.pem'),
+                        ca: fs.readFileSync('ca-crt.pem')
+                    };
+                    https.globalAgent.maxSockets = 1000000;
+                    https.createServer(options, app).listen({port: usecsebaseport, agent: false}, function () {
+                        console.log('mobius server (' + ip.address() + ') running at ' + usecsebaseport + ' port');
+                        cb.create(function (rsp) {
+                            console.log(JSON.stringify(rsp));
+                            //noti_mqtt_begin();
+                        });
+                    });
+                }
+            }
+        });
+    }
+}
+else {
+    db.connect(usedbhost, 3306, 'root', usedbpass, function (rsc) {
+        if (rsc == '1') {
+            cb.create(function (rsp) {
+                console.log(JSON.stringify(rsp));
+
+                if(use_secure === 'disable') {
+                    http.globalAgent.maxSockets = 1000000;
+                    http.createServer(app).listen({port: usecsebaseport, agent: false}, function () {
+                        console.log('mobius server (' + ip.address() + ') running at ' + usecsebaseport + ' port');
+                        require('./pxy_mqtt');
+                        //noti_mqtt_begin();
+
+                        if (usecsetype === 'mn' || usecsetype === 'asn') {
+                            global.refreshIntervalId = setInterval(function () {
+                                csr_custom.emit('register_remoteCSE');
+                            }, 5000);
+                        }
+                    });
+                }
+                else {
+                    var options = {
+                        key: fs.readFileSync('server-key.pem'),
+                        cert: fs.readFileSync('server-crt.pem'),
+                        ca: fs.readFileSync('ca-crt.pem')
+                    };
+                    https.globalAgent.maxSockets = 1000000;
+                    https.createServer(options, app).listen({port: usecsebaseport, agent: false}, function () {
+                        console.log('mobius server (' + ip.address() + ') running at ' + usecsebaseport + ' port');
+                        require('./pxy_mqtt');
+                        //noti_mqtt_begin();
+                        //require('./mobius/ts_agent');
+
+                        if (usecsetype === 'mn' || usecsetype === 'asn') {
+                            global.refreshIntervalId = setInterval(function () {
+                                csr_custom.emit('register_remoteCSE');
+                            }, 5000);
+                        }
+                    });
+                }
+            });
+        }
+    });
+}
+
+global.get_ri_list_sri = function (request, response, sri_list, ri_list, count, callback) {
+    if(sri_list.length <= count) {
+        callback(sri_list, request, response);
+    }
+    else {
+        db_sql.get_ri_sri(request, response, sri_list[count], function (err, results, request, response) {
+            ri_list[count] = ((results.length == 0) ? sri_list[count] : results[0].ri);
+
+            if (sri_list.length <= ++count) {
+                callback(ri_list, request, response);
+            }
+            else {
+                get_ri_list_sri(request, response, sri_list, ri_list, count, function (ri_list, request, response) {
+                    callback(ri_list, request, response);
+                });
+            }
+        });
+    }
+};
+
+global.update_route = function (callback) {
+    var cse_poa = {};
+    db_sql.select_csr_like(usecsebase, function (err, results_csr) {
+        if (!err) {
+            for (var i = 0; i < results_csr.length; i++) {
+                var poa_arr = JSON.parse(results_csr[i].poa);
+                for (var j = 0; j < poa_arr.length; j++) {
+                    if (url.parse(poa_arr[j]).protocol == 'http:' || url.parse(poa_arr[j]).protocol == 'https:') {
+                        cse_poa[results_csr[i].ri.split('/')[2]] = poa_arr[j];
+                    }
+                }
+            }
+        }
+        callback(cse_poa);
+    });
+};
+
+function make_short_nametype(body_Obj) {
+    if (body_Obj[Object.keys(body_Obj)[0]]['$'] != null) {
+        if (body_Obj[Object.keys(body_Obj)[0]]['$'].rn != null) {
+            body_Obj[Object.keys(body_Obj)[0]].rn = body_Obj[Object.keys(body_Obj)[0]]['$'].rn;
+        }
+        delete body_Obj[Object.keys(body_Obj)[0]]['$'];
+    }
+
+    var rootnm = Object.keys(body_Obj)[0].split(':')[1];
+    body_Obj[rootnm] = body_Obj[Object.keys(body_Obj)[0]];
+    delete body_Obj[Object.keys(body_Obj)[0]];
+
+    for (var attr in body_Obj[rootnm]) {
+        if (body_Obj[rootnm].hasOwnProperty(attr)) {
+            if (typeof body_Obj[rootnm][attr] === 'boolean') {
+                body_Obj[rootnm][attr] = body_Obj[rootnm][attr].toString();
+            }
+            else if (typeof body_Obj[rootnm][attr] === 'string') {
+            }
+            else if (typeof body_Obj[rootnm][attr] === 'number') {
+                body_Obj[rootnm][attr] = body_Obj[rootnm][attr].toString();
+            }
+            else {
+            }
+        }
+    }
+}
+
+global.make_json_obj = function(bodytype, str, callback) {
+    try {
+        if (bodytype === 'xml') {
+            var message = str;
+            var parser = new xml2js.Parser({explicitArray: false});
+            parser.parseString(message.toString(), function (err, result) {
+                if (err) {
+                    console.log('[mqtt make json obj] xml2js parser error]');
+                    callback('0');
+                }
+                else {
+                    for (var prop in result) {
+                        if (result.hasOwnProperty(prop)) {
+                            for (var attr in result[prop]) {
+                                if (result[prop].hasOwnProperty(attr)) {
+                                    if (attr == '$') {
+                                        delete result[prop][attr];
+                                    }
+                                    else if (attr == 'pc') {
+                                        make_json_arraytype(result[prop][attr]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    callback('1', result);
+                }
+            });
+        }
+        else if (bodytype === 'cbor') {
+            cbor.decodeFirst(str, function(err, result) {
+                if (err) {
+                    console.log('cbor parser error]');
+                }
+                else {
+                    callback('1', result);
+                }
+            });
+        }
+        else {
+            var result = JSON.parse(str);
+            callback('1', result);
+        }
+    }
+    catch (e) {
+        console.error(e.message);
+        callback('0');
+    }
+};
+
+global.make_json_arraytype = function (body_Obj) {
+    for (var prop in body_Obj) {
+        if (body_Obj.hasOwnProperty(prop)) {
+            for (var attr in body_Obj[prop]) {
+                if (body_Obj[prop].hasOwnProperty(attr)) {
+                    if (attr == 'srv' || attr == 'aa' || attr == 'at' || attr == 'poa' || attr == 'lbl' || attr == 'acpi' || attr == 'srt' || attr == 'nu' || attr == 'mid' || attr == 'macp' || attr == 'rels') {
+                        if (body_Obj[prop][attr]) {
+                            body_Obj[prop][attr] = body_Obj[prop][attr].split(' ');
+                        }
+                        if (body_Obj[prop][attr] == '') {
+                            body_Obj[prop][attr] = [];
+                        }
+                        if (body_Obj[prop][attr] == '[]') {
+                            body_Obj[prop][attr] = [];
+                        }
+                    }
+
+                    if (attr == 'rqps') {
+                        var rqps_type = getType(body_Obj[prop][attr]);
+                        if (rqps_type === 'array') {
+
+                        }
+                        else if (rqps_type === 'object') {
+                            var temp = body_Obj[prop][attr];
+                            body_Obj[prop][attr] = [];
+                            body_Obj[prop][attr].push(temp);
+                        }
+                        else {
+
+                        }
+                    }
+
+                    if (attr == 'enc') {
+                        if (body_Obj[prop][attr]) {
+                            if (body_Obj[prop][attr].net) {
+                                body_Obj[prop][attr].net = body_Obj[prop][attr].net.split(' ');
+                            }
+                        }
+                    }
+
+                    if (attr == 'pv' || attr == 'pvs') {
+                        if (body_Obj[prop][attr]) {
+                            if (body_Obj[prop][attr].acr) {
+                                if (!Array.isArray(body_Obj[prop][attr].acr)) {
+                                    temp = body_Obj[prop][attr].acr;
+                                    body_Obj[prop][attr].acr = [];
+                                    body_Obj[prop][attr].acr[0] = temp;
+                                }
+
+                                for (var acr_idx in body_Obj[prop][attr].acr) {
+                                    if (body_Obj[prop][attr].acr.hasOwnProperty(acr_idx)) {
+                                        if (body_Obj[prop][attr].acr[acr_idx].acor) {
+                                            body_Obj[prop][attr].acr[acr_idx].acor = body_Obj[prop][attr].acr[acr_idx].acor.split(' ');
+                                        }
+
+                                        if (body_Obj[prop][attr].acr[acr_idx].hasOwnProperty('acco')) {
+                                            if (!Array.isArray(body_Obj[prop][attr].acr[acr_idx].acco)) {
+                                                temp = body_Obj[prop][attr].acr[acr_idx].acco;
+                                                body_Obj[prop][attr].acr[acr_idx].acco = [];
+                                                body_Obj[prop][attr].acr[acr_idx].acco[0] = temp;
+                                            }
+
+                                            var acco = body_Obj[prop][attr].acr[acr_idx].acco;
+                                            for(var acco_idx in acco) {
+                                                if(acco.hasOwnProperty(acco_idx)) {
+                                                    if (acco[acco_idx].hasOwnProperty('acip')) {
+                                                        if (acco[acco_idx].acip.hasOwnProperty('ipv4')) {
+                                                            if (getType(acco[acco_idx].acip['ipv4']) == 'string') {
+                                                                acco[acco_idx].acip['ipv4'] = acco[acco_idx].acip.ipv4.split(' ');
+                                                            }
+                                                        }
+                                                        else if (acco[acco_idx].acip.hasOwnProperty('ipv6')) {
+                                                            if (getType(acco[acco_idx].acip['ipv6']) == 'string') {
+                                                                acco[acco_idx].acip['ipv6'] = acco[acco_idx].acip.ipv6.split(' ');
+                                                            }
+                                                        }
+                                                    }
+                                                    if (acco[acco_idx].hasOwnProperty('actw')) {
+                                                        if (getType(acco[acco_idx].actw) == 'string') {
+                                                            temp = acco[acco_idx].actw;
+                                                            acco[acco_idx]['actw'] = [];
+                                                            acco[acco_idx].actw[0] = temp;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (body_Obj[prop][attr].acr == '') {
+                                body_Obj[prop][attr].acr = [];
+                            }
+
+                            if (body_Obj[prop][attr].acr == '[]') {
+                                body_Obj[prop][attr].acr = [];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+};
+
+function parse_to_json(request, response, callback) {
+    var body_Obj = {};
+
+    if (request.headers.usebodytype === 'xml') {
+        try {
+            var parser = new xml2js.Parser({explicitArray: false});
+            parser.parseString(request.body.toString(), function (err, result) {
+                if (err) {
+                    responder.error_result(request, response, 400, 4000, '[parse_to_json] do not parse xml body' + err.message);
+                    callback('0', body_Obj);
+                }
+                else {
+                    body_Obj = result;
+                    make_short_nametype(body_Obj);
+                    make_json_arraytype(body_Obj);
+
+                    request.headers.rootnm = Object.keys(body_Obj)[0];
+                    request.bodyObj = body_Obj;
+                    callback('1', body_Obj);
+                }
+            });
+        }
+        catch(e) {
+            responder.error_result(request, response, 400, 4000, '[parse_to_json] do not parse xml body');
+            callback('0', body_Obj);
+        }
+    }
+    else if (request.headers.usebodytype === 'cbor') {
+        try {
+            var encoded = request.body;
+            cbor.decodeFirst(encoded, function(err, result) {
+                if (err) {
+                    responder.error_result(request, response, 400, 4000, '[parse_to_json] do not parse cbor body');
+                    callback('0', body_Obj);
+                }
+                else {
+                    body_Obj = result;
+                    make_short_nametype(body_Obj);
+                    //make_json_arraytype(body_Obj);
+
+                    request.headers.rootnm = Object.keys(body_Obj)[0];
+                    request.bodyObj = body_Obj;
+                    callback('1', body_Obj);
+                }
+            });
+        }
+        catch(e) {
+            responder.error_result(request, response, 400, 4000, '[parse_to_json] do not parse cbor body');
+            callback('0', body_Obj);
+        }
+    }
+    else {
+        try {
+            body_Obj = JSON.parse(request.body.toString());
+            make_short_nametype(body_Obj);
+
+            if (Object.keys(body_Obj)[0] == 'undefined') {
+                responder.error_result(request, response, 400, 4000, '[parse_to_json] root tag of body is not matched');
+                callback('0', body_Obj);
+            }
+
+            request.headers.rootnm = Object.keys(body_Obj)[0];
+            request.bodyObj = body_Obj;
+            callback('1', body_Obj);
+        }
+        catch (e) {
+            responder.error_result(request, response, 400, 4000, '[parse_to_json] do not parse json body');
+            callback('0', body_Obj);
+        }
+    }
+}
+
+function parse_body_format(request, response, callback) {
+    parse_to_json(request, response, function(rsc, body_Obj) {
+        if(rsc == '0') {
+            callback('0', body_Obj);
+        }
+        else {
+            request.headers.rootnm = Object.keys(body_Obj)[0];
+            for (var prop in body_Obj) {
+                if (body_Obj.hasOwnProperty(prop)) {
+                    for (var attr in body_Obj[prop]) {
+                        if (body_Obj[prop].hasOwnProperty(attr)) {
+                            if (attr == 'aa' || attr == 'at' || attr == 'poa' || attr == 'acpi' || attr == 'srt' ||
+                                attr == 'nu' || attr == 'mid' || attr == 'macp' || attr == 'rels' || attr == 'rqps' || attr == 'srv') {
+                                if (!Array.isArray(body_Obj[prop][attr])) {
+                                    body_Obj = {};
+                                    body_Obj['dbg'] = attr + ' attribute should be json array format';
+                                    responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                    callback('0', body_Obj);
+                                    return '0';
+                                }
+                            }
+                            else if (attr == 'lbl') {
+                                if (body_Obj[prop][attr] == null) {
+                                    body_Obj[prop][attr] = [];
+                                }
+                                else if (!Array.isArray(body_Obj[prop][attr])) {
+                                    body_Obj = {};
+                                    body_Obj['dbg'] = attr + ' attribute should be json array format';
+                                    responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                    callback('0', body_Obj);
+                                    return '0';
+                                }
+                            }
+                            else if (attr == 'enc') {
+                                if (body_Obj[prop][attr].net) {
+                                    if (!Array.isArray(body_Obj[prop][attr].net)) {
+                                        body_Obj = {};
+                                        body_Obj['dbg'] = attr + '.net attribute should be json array format';
+                                        responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                        callback('0', body_Obj);
+                                        return '0';
+                                    }
+                                }
+                                else {
+                                    body_Obj = {};
+                                    body_Obj['dbg'] = attr + 'attribute should have net key as child in json format';
+                                    responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                    callback('0', body_Obj);
+                                    return '0';
+                                }
+                            }
+                            else if (attr == 'pv' || attr == 'pvs') {
+                                if (body_Obj[prop][attr].hasOwnProperty('acr')) {
+                                    if (!Array.isArray(body_Obj[prop][attr].acr)) {
+                                        body_Obj = {};
+                                        body_Obj['dbg'] = attr + '.acr should be json array format';
+                                        responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                        callback('0', body_Obj);
+                                        return '0';
+                                    }
+
+                                    var acr = body_Obj[prop][attr].acr;
+                                    for (var acr_idx in acr) {
+                                        if (acr.hasOwnProperty(acr_idx)) {
+                                            if (acr[acr_idx].acor) {
+                                                if (!Array.isArray(acr[acr_idx].acor)) {
+                                                    body_Obj = {};
+                                                    body_Obj['dbg'] = attr + '.acr[' + acr_idx + '].acor should be json array format';
+                                                    responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                                    callback('0', body_Obj);
+                                                    return '0';
+                                                }
+                                            }
+
+                                            if (acr[acr_idx].acco) {
+                                                if (!Array.isArray(acr[acr_idx].acco)) {
+                                                    body_Obj = {};
+                                                    body_Obj['dbg'] = attr + '.acr[' + acr_idx + '].acco should be json array format';
+                                                    responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                                    callback('0', body_Obj);
+                                                    return '0';
+                                                }
+                                                for (var acco_idx in acr[acr_idx].acco) {
+                                                    if (acr[acr_idx].acco.hasOwnProperty(acco_idx)) {
+                                                        var acco = acr[acr_idx].acco[acco_idx];
+                                                        if (acco.acip) {
+                                                            if (acco.acip['ipv4']) {
+                                                                if (!Array.isArray(acco.acip['ipv4'])) {
+                                                                    body_Obj = {};
+                                                                    body_Obj['dbg'] = attr + '.acr[' + acr_idx + '].acco.acip.ipv4 should be json array format';
+                                                                    responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                                                    callback('0', body_Obj);
+                                                                    return '0';
+                                                                }
+                                                            }
+                                                            else if (acco.acip['ipv6']) {
+                                                                if (!Array.isArray(acco.acip['ipv6'])) {
+                                                                    body_Obj = {};
+                                                                    body_Obj['dbg'] = attr + '.acr[' + acr_idx + '].acco.acip.ipv6 should be json array format';
+                                                                    responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                                                    callback('0', body_Obj);
+                                                                    return '0';
+                                                                }
+                                                            }
+                                                        }
+
+                                                        if (acco.actw) {
+                                                            if (!Array.isArray(acco.actw)) {
+                                                                body_Obj = {};
+                                                                body_Obj['dbg'] = attr + '.acr[' + acr_idx + '].acco[' + acco_idx + '].actw should be json array format';
+                                                                responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                                                callback('0', body_Obj);
+                                                                return '0';
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else if (attr == 'uds') {
+                                if (body_Obj[prop][attr].can && body_Obj[prop][attr].sus) {
+                                }
+                                else {
+                                    body_Obj = {};
+                                    body_Obj['dbg'] = attr + ' attribute should have can and sus key in json format';
+                                    responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                    callback('0', body_Obj);
+                                    return '0';
+                                }
+                            }
+                            else if (attr == 'cas') {
+                                if (body_Obj[prop][attr].can && body_Obj[prop][attr].sus) {
+                                }
+                                else {
+                                    body_Obj = {};
+                                    body_Obj['dbg'] = attr + ' attribute should have can and sus key in json format';
+                                    responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                                    callback('0', body_Obj);
+                                    return '0';
+                                }
+                            }
+                            else {
+                            }
+                        }
+                    }
+                }
+            }
+
+            callback(request.ty, body_Obj);
+        }
+    });
+}
+
+function check_resource(request, response, body_Obj, callback) {
+    var ri = url.parse(request.url).pathname;
+
+    var chk_fopt = ri.split('/fopt');
+    if(chk_fopt.length == 2) {
+        ri = chk_fopt[0];
+        op = 'fanoutpoint';
+        db_sql.select_grp_lookup(ri, function (err, result_Obj) {
+            if (!err) {
+                if (result_Obj.length == 1) {
+                    result_Obj[0].acpi = JSON.parse(result_Obj[0].acpi);
+                    result_Obj[0].lbl = JSON.parse(result_Obj[0].lbl);
+                    result_Obj[0].aa = JSON.parse(result_Obj[0].aa);
+                    result_Obj[0].at = JSON.parse(result_Obj[0].at);
+                    callback('1', result_Obj[0], op, request, response, body_Obj);
+                }
+                else {
+                    result_Obj = {};
+                    result_Obj['dbg'] = '[check_resource] resource does not exist';
+                    responder.response_result(request, response, 404, result_Obj, 4004, request.url, result_Obj['dbg']);
+                    callback('0', {}, '', request, response, body_Obj);
+                    return '0';
+                }
+            }
+            else {
+                var code = result_Obj.message;
+                result_Obj = {};
+                result_Obj['dbg'] = code;
+                responder.response_result(request, response, 500, result_Obj, 5000, request.url, result_Obj['dbg']);
+                callback('0', {}, '', request, response, body_Obj);
+                return '0';
+            }
+        });
+    }
+    else {
+        console.log('X-M2M-Origin: ' + request.headers['x-m2m-origin']);
+        console.log(body_Obj);
+
+        var op = 'direct';
+        var resource_Obj = request.targetObject;
+        var rootnm = Object.keys(resource_Obj)[0];
+        callback('1', resource_Obj[rootnm], op, request, response, body_Obj);
+        return '0';
+    }
+}
+
+function check_rt_query(request, response, body_Obj, callback) {
+    //var ri = url.parse(request.url).pathname;
+
+    //var url_arr = ri.split('/');
+    //var last_url = url_arr[url_arr.length-1];
+    //var op = 'direct';
+
+    if (request.query.real == 4) {
+        var check_Obj = {};
+        check_Obj.ty = '3';
+        callback('1', check_Obj, 'direct', request, response, body_Obj);
+        return'1';
+    }
+    if (request.query.rt == 3) { // default, blocking
+        check_resource(request, response, body_Obj, function (rsc, check_Obj, op, request, response, body_Obj) {
+            callback(rsc, check_Obj, op, request, response, body_Obj);
+        });
+    }
+    else if (request.query.rt == 1 || request.query.rt == 2) { // nonblocking
+        if(request.query.rt == 2 && request.headers['x-m2m-rtu'] == null && request.headers['x-m2m-rtu'] == '') {
+            body_Obj = {};
+            body_Obj['dbg'] = 'X-M2M-RTU is none';
+            responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+            callback('0', {}, '', request, response, body_Obj);
+            return '0';
+        }
+        // first create request resource under CSEBase
+        var temp_rootnm = request.headers.rootnm;
+        //var temp_rt = request.query.rt;
+        var ty = '17';
+        var rt_body_Obj = {req: {}};
+        request.headers.rootnm = Object.keys(rt_body_Obj)[0];
+        request.query.rt = 3;
+        resource.create(request, response, ty, rt_body_Obj, function (rsc) {
+            if (rsc == '1') {
+                request.headers.rootnm = temp_rootnm;
+                request.query.rt = 1;
+                check_resource(request, response, body_Obj, function (rsc, parent_comm, op, request, response, body_Obj) {
+                    callback(rsc, parent_comm, op, request, response, body_Obj);
+                });
+            }
+        });
+    }
+    else {
+        body_Obj = {};
+        body_Obj['dbg'] = 'OPERATION_NOT_ALLOWED (rt query is not supported)';
+        responder.response_result(request, response, 405, body_Obj, 4005, request.url, body_Obj['dbg']);
+        callback('0', {}, '', request, response, body_Obj);
+        return '0';
+    }
+}
+
+function check_grp(request, response, callback) {
+    var result_Obj = request.targetObject;
+    var rootnm = Object.keys(result_Obj)[0];
+
+    if(result_Obj[rootnm].ty == 9) {
+        if (result_Obj[rootnm].mid.length == 0) {
+            result_Obj = {};
+            result_Obj['dbg'] = 'NO_MEMBERS: memberID in parent group is empty';
+            responder.response_result(request, response, 403, result_Obj, 4109, request.url, result_Obj['dbg']);
+            callback('0');
+            return '0';
+        }
+        else {
+            callback('1', result_Obj[rootnm]);
+        }
+    }
+    else {
+        result_Obj = {};
+        result_Obj['dbg'] = '[check_grp] resource does not exist';
+        responder.response_result(request, response, 404, result_Obj, 4004, request.url, result_Obj['dbg']);
+        callback('0');
+        return '0';
+    }
+}
+
+/**
+ *
+ * @param request
+ * @param response
+ */
+function lookup_create(request, response) {
+
+    check_rt_query(request, response, request.bodyObj, function (rsc, parentObj, op, request, response, body_Obj) {
+        if (rsc == '0') {
+            return rsc;
+        }
+
+        var rootnm = request.headers.rootnm;
+        
+        tr.check(request, parentObj.ri, body_Obj, function (rsc, body_Obj) {
+            if (rsc == '0') {
+                body_Obj = {};
+                body_Obj['dbg'] = resultStatusCode['4230'];
+                responder.response_result(request, response, 423, body_Obj, 4230, request.url, resultStatusCode['4230']);
+                return '0';
+            }
+
+            if (op == 'fanoutpoint') {
+                // check access right for fanoutpoint
+                check_grp(request, response, function (rsc, result_grp) {
+                    if (rsc == '0') {
+                        return rsc;
+                    }
+
+                    security.check(request, response, parentObj.ty, result_grp.macp, '1', result_grp.cr, function (rsc, request, response) {
+                        if (rsc == '0') {
+                            body_Obj = {};
+                            body_Obj['dbg'] = resultStatusCode['4103'];
+                            responder.response_result(request, response, 403, body_Obj, 4103, request.url, resultStatusCode['4103']);
+                            return '0';
+                        }
+                        
+                        fopt.check(request, response, result_grp, ty, body_Obj);
+                    });
+                });
+            }
+            else { //if(op == 'direct') {   // most of request op is direct
+                if(request.query.real == 4) {
+
+                }
+
+                if ((request.ty == 1) && (parentObj.ty == 5 || parentObj.ty == 16 || parentObj.ty == 2)) { // accessControlPolicy 접근제약정책
+                }
+                else if ((request.ty == 9) && (parentObj.ty == 5 || parentObj.ty == 16 || parentObj.ty == 2)) { // group    그룹제어를 하기위한 Source Code가 담기는 곳 !!!! API통신을 기본으로 하자.
+                }
+                else if ((request.ty == 16) && (parentObj.ty == 5)) { // remoteCSE
+                    if (usecsetype == 'asn' && request.headers.csr == null) {
+                        body_Obj = {};
+                        body_Obj['dbg'] = 'ASN CSE can not have child CSE (remoteCSE)';
+                        responder.response_result(request, response, 400, body_Obj, 4000, request.url, body_Obj['dbg']);
+                        return '0';
+                    }
+                }
+                else if ((request.ty == 10) && (parentObj.ty == 5)) { // locationPolicy 위치 정책
+                }
+                else if ((request.ty == 2) && (parentObj.ty == 5)) { // ae  (application entity)
+                }
+                else if ((request.ty == 3) && (parentObj.ty == 5 || parentObj.ty == 2 || parentObj.ty == 3)) { // container (content들을 담는 container)
+                }
+                else if ((request.ty == 23) && (parentObj.ty == 5 || parentObj.ty == 16 || parentObj.ty == 2 ||
+                        parentObj.ty == 3 || parentObj.ty == 24 || parentObj.ty == 29 || parentObj.ty == 9 || parentObj.ty == 1 || parentObj.ty == 27)) { // sub (subscription)
+                }
+                else if ((request.ty == 4) && (parentObj.ty == 3)) { // contentInstance (contentInstance 생성에 따른 code 호출)
+                    //JONGJIN DEFINED
+                    if(request.targetObject.cnt.rn === 'keypad'){   //request.targetObject.cnt.rn 에 aeName이 저장되어 있따. (분기처리할 때 사용)
+                        console.log('keypad 동작');
+                        doorlockdb.query(`(SELECT password FROM password ORDER BY time DESC LIMIT 1)
+                        UNION (SELECT disposablepassword FROM smsservice WHERE activetime<=now() AND unactivetime>=now() AND opennumber=0)
+                        `, (error, result, fields) => {
+                            console.log(result);
+                            for(var i=0;i< result.length;i++){
+                                if(result[i].password === body_Obj.cin.con){
+                                    Mrequest(Servooptions);
+                                    if(i!=0){
+                                        doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+                else if ((request.ty == 24) && (parentObj.ty == 2 || parentObj.ty == 3 || parentObj.ty == 4 || parentObj.ty == 29)) { // semanticDescriptor
+                }
+                else if ((request.ty == 29) && (parentObj.ty == 5 || parentObj.ty == 16 || parentObj.ty == 2)) { // timeSeries
+                }
+                else if ((request.ty == 30) && (parentObj.ty == 29)) { // timeSeriesInstance
+                    //body_Obj[rootnm].mni = parent_comm.mni;
+                }
+                else if ((request.ty == 27) && (parentObj.ty == 2 || parentObj.ty == 16)) { // multimediaSession
+                }
+                else if ((request.ty == 14) && (parentObj.ty == 5)) { // node
+                }
+                else if ((request.ty == 13) && (parentObj.ty == 14)) { // mgmtObj
+                }
+                else if ((request.ty == 38) && (parentObj.ty == 5 || parentObj.ty == 16 || parentObj.ty == 2 ||
+                        parentObj.ty == 3 || parentObj.ty == 24 || parentObj.ty == 29 || parentObj.ty == 9 || parentObj.ty == 1 || parentObj.ty == 27)) { // transaction
+                }
+                else if ((request.ty == 39) && (parentObj.ty == 5 || parentObj.ty == 16 || parentObj.ty == 2 ||
+                        parentObj.ty == 3 || parentObj.ty == 24 || parentObj.ty == 29 || parentObj.ty == 9 || parentObj.ty == 1 || parentObj.ty == 27)) { // transaction
+                }
+                else {
+                    body_Obj = {};
+                    body_Obj['dbg'] = 'TARGET_NOT_SUBSCRIBABLE: request ty creating can not create under parent resource';
+                    responder.response_result(request, response, 403, body_Obj, 5203, request.url, body_Obj['dbg']);
+                    return '0';
+                }
+                if (((request.ty == 4) && (parentObj.ty == 3)) || ((request.ty == 30) && (parentObj.ty == 29))) { // contentInstance
+                    if (parentObj.mni == null) {
+                        //body_Obj[rootnm].mni = '3153600000';
+                    }
+                    else {
+                        if (parseInt(parentObj.mni) == 0) {
+                            body_Obj = {};
+                            body_Obj['dbg'] = 'can not create cin because mni value is zero';
+                            responder.response_result(request, response, 406, body_Obj, 5207, request.url, body_Obj['dbg']);
+                            return '0';
+                        }
+                        else if (parseInt(parentObj.mbs) == 0) {
+                            body_Obj = {};
+                            body_Obj['dbg'] = 'can not create cin because mbs value is zero';
+                            responder.response_result(request, response, 406, body_Obj, 5207, request.url, body_Obj['dbg']);
+                            return '0';
+                        }
+                        else if (parentObj.disr == true) {
+                            body_Obj = {};
+                            body_Obj['dbg'] = 'OPERATION NOT ALLOWED: disr attribute is true';
+                            responder.response_result(request, response, 405, body_Obj, 4005, request.url, body_Obj['dbg']);
+                            return '0';
+                        }
+                        else {
+                            //body_Obj[rootnm].mni = parent_spec[0].mni;
+                        }
+                    }
+
+                    request.headers.mni = parentObj.mni;
+                    request.headers.mbs = parentObj.mbs;
+                    request.headers.cni = parentObj.cni;
+                    request.headers.cbs = parentObj.cbs;
+                    request.headers.st = parentObj.st;
+                }
+
+                if (parentObj.length == 0) {
+                    parentObj = {};
+                    parentObj.cr = '';
+                    console.log('no creator');
+                }
+                else {
+                    if (parentObj.ty == 2) {
+                        parentObj.cr = parentObj.aei;
+                    }
+                }
+
+                if (request.ty == 23) {
+                    var access_value = '3';
+                }
+                else {
+                    access_value = '1';
+                }
+
+                var tid = 'security.check - ' + require('shortid').generate();
+                console.time(tid);
+                security.check(request, response, parentObj.ty, parentObj.acpi, access_value, parentObj.cr, function (rsc, request, response) {
+                    if (rsc == '0') {
+                        body_Obj = {};
+                        body_Obj['dbg'] = resultStatusCode['4103'];
+                        responder.response_result(request, response, 403, body_Obj, 4103, request.url, resultStatusCode['4103']);
+                        return '0';
+                    }
+                    console.timeEnd(tid);
+                    resource.create(request, response, request.ty, body_Obj, function (rsc) {
+
+                    });
+                });
+            }
+        });
+    });
+}
+
+function lookup_retrieve(request, response) {
+    check_rt_query(request, response, request.bodyObj, function (rsc, resultObj, op, request, response, body_Obj) {
+        if (rsc == '0') {
+            return rsc;
+        }
+
+        tr.check(request, resultObj.ri, body_Obj, function (rsc, body_Obj) {
+            if (rsc == '0') {
+                body_Obj = {};
+                body_Obj['dbg'] = resultStatusCode['4230'];
+                responder.response_result(request, response, 423, body_Obj, 4230, request.url, resultStatusCode['4230']);
+                return '0';
+            }
+
+            if (op == 'fanoutpoint') {
+                // check access right for fanoutpoint
+                check_grp(request, response, function (rsc, result_grp) {
+                    if (rsc == '0') {
+                        return rsc;
+                    }
+
+                    if (request.query.fu == 1) {
+                        security.check(request, response, resultObj.ty, result_grp.macp, '32', result_grp.cr, function (rsc, request, response) {
+                            if (rsc == '0') {
+                                body_Obj = {};
+                                body_Obj['dbg'] = resultStatusCode['4103'];
+                                responder.response_result(request, response, 403, body_Obj, 4103, request.url, resultStatusCode['4103']);
+                                return '0';
+                            }
+
+                            fopt.check(request, response, result_grp, body_Obj);
+                        });
+                    }
+                    else {
+                        security.check(request, response, resultObj.ty, result_grp.macp, '2', result_grp.cr, function (rsc, request, response) {
+                            if (rsc == '0') {
+                                body_Obj = {};
+                                body_Obj['dbg'] = resultStatusCode['4103'];
+                                responder.response_result(request, response, 403, body_Obj, 4103, request.url, resultStatusCode['4103']);
+                                return '0';
+                            }
+
+                            fopt.check(request, response, result_grp, body_Obj);
+                        });
+                    }
+
+                });
+            }
+            else { //if(op == 'direct') {
+                if (resultObj.ty == 2) {
+                    resultObj.cr = resultObj.aei;
+                }
+                else if (resultObj.ty == 16) {
+                    resultObj.cr = resultObj.csi;
+                }
+
+                if (request.query.fu == 1) {
+                    security.check(request, response, resultObj.ty, resultObj.acpi, '32', resultObj.cr, function (rsc, request, response) {
+                        if (rsc == '0') {
+                            body_Obj = {};
+                            body_Obj['dbg'] = resultStatusCode['4103'];
+                            responder.response_result(request, response, 403, body_Obj, 4103, request.url, resultStatusCode['4103']);
+                            return '0';
+                        }
+                        resource.retrieve(request, response, resultObj);
+                    });
+                }
+                else {
+                    security.check(request, response, resultObj.ty, resultObj.acpi, '2', resultObj.cr, function (rsc, request, response) {
+                        if (rsc == '0') {
+                            body_Obj = {};
+                            body_Obj['dbg'] = resultStatusCode['4103'];
+                            responder.response_result(request, response, 403, body_Obj, 4103, request.url, resultStatusCode['4103']);
+                            return '0';
+                        }
+                        resource.retrieve(request, response, resultObj);
+                    });
+                }
+            }
+        });
+    });
+}
+
+function lookup_update(request, response) {
+    check_rt_query(request, response, request.bodyObj, function (rsc, resultObj, op, request, response, body_Obj) {
+        if (rsc == '0') {
+            return rsc;
+        }
+
+        tr.check(request, resultObj.ri, body_Obj, function (rsc, body_Obj) {
+            if (rsc == '0') {
+                body_Obj = {};
+                body_Obj['dbg'] = resultStatusCode['4230'];
+                responder.response_result(request, response, 423, body_Obj, 4230, request.url, resultStatusCode['4230']);
+                return '0';
+            }
+
+            if (op == 'fanoutpoint') {
+                // check access right for fanoutpoint
+                check_grp(request, response, function (rsc, result_grp) {
+                    if (rsc == '0') {
+                        return rsc;
+                    }
+
+                    security.check(request, response, resultObj.ty, result_grp.macp, '4', result_grp.cr, function (rsc, request, response) {
+                        if (rsc == '0') {
+                            body_Obj = {};
+                            body_Obj['dbg'] = resultStatusCode['4103'];
+                            responder.response_result(request, response, 403, body_Obj, 4103, request.url, resultStatusCode['4103']);
+                            return '0';
+                        }
+
+                        fopt.check(request, response, result_grp, resultObj.ty, body_Obj);
+                    });
+                });
+            }
+            else { //if(op == 'direct') {
+                if (resultObj.ty == 2) {
+                    resultObj.cr = resultObj.aei;
+                }
+                else if (resultObj.ty == 16) {
+                    resultObj.cr = resultObj.csi;
+                }
+
+                var acpi_check = 0;
+                var other_check = 0;
+                for(var rootnm in body_Obj) {
+                    if(body_Obj.hasOwnProperty(rootnm)) {
+                        for(var attr in body_Obj[rootnm]) {
+                            if(body_Obj[rootnm].hasOwnProperty(attr)) {
+                                if(attr == 'acpi') {
+                                    acpi_check++;
+                                }
+                                else {
+                                    other_check++;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if(other_check > 0) {
+                    security.check(request, response, resultObj.ty, resultObj.acpi, '4', resultObj.cr, function (rsc, request, response) {
+                        if (rsc == '0') {
+                            body_Obj = {};
+                            body_Obj['dbg'] = resultStatusCode['4103'];
+                            responder.response_result(request, response, 403, body_Obj, 4103, request.url, resultStatusCode['4103']);
+                            return '0';
+                        }
+                        resource.update(request, response, resultObj, body_Obj);
+                    });
+                }
+                else {
+                    resource.update(request, response, resultObj, body_Obj);
+                }
+            }
+        });
+    });
+}
+
+function lookup_delete(request, response) {
+    check_rt_query(request, response, request.bodyObj, function (rsc, resultObj, op, request, response, body_Obj) {
+        if (rsc == '0') {
+            return rsc;
+        }
+
+        tr.check(request, resultObj.ri, body_Obj, function (rsc, body_Obj) {
+            if (rsc == '0') {
+                var body_Obj = {};
+                body_Obj['dbg'] = resultStatusCode['4230'];
+                responder.response_result(request, response, 423, body_Obj, 4230, request.url, resultStatusCode['4230']);
+                return '0';
+            }
+
+            if (op == 'fanoutpoint') {
+                // check access right for fanoutpoint
+                check_grp(request, response, function (rsc, result_grp) {
+                    if (rsc == '0') {
+                        return rsc;
+                    }
+
+                    security.check(request, response, resultObj.ty, result_grp.macp, '8', result_grp.cr, function (rsc, request, response) {
+                        if (rsc == '0') {
+                            body_Obj = {};
+                            body_Obj['dbg'] = resultStatusCode['4103'];
+                            responder.response_result(request, response, 403, body_Obj, 4103, request.url, resultStatusCode['4103']);
+                            return '0';
+                        }
+
+                        fopt.check(request, response, result_grp, resultObj.ty, body_Obj);
+                    });
+                });
+            }
+            else { //if(op == 'direct') {
+                if (resultObj.ty == 2) {
+                    resultObj.cr = resultObj.aei;
+                }
+                else if (resultObj.ty == 16) {
+                    resultObj.cr = resultObj.csi;
+                }
+
+                security.check(request, response, resultObj.ty, resultObj.acpi, '8', resultObj.cr, function (rsc, request, response) {
+                    if (rsc == '0') {
+                        body_Obj = {};
+                        body_Obj['dbg'] = resultStatusCode['4103'];
+                        responder.response_result(request, response, 403, body_Obj, 4103, request.url, resultStatusCode['4103']);
+                        return '0';
+                    }
+
+                    // for(var idx in cbs_cache) {
+                    //     if(cbs_cache.hasOwnProperty(idx)) {
+                    //         if(idx.includes(resultObj.ri)) {
+                    //             delete cbs_cache[idx];
+                    //             del_cbs_cache(idx);
+                    //         }
+                    //     }
+                    // }
+
+                    resource.delete(request, response, resultObj);
+                });
+            }
+        });
+    });
+}
+
+function updateHitCount(binding) {
+    var bodyObj = {};
+    bodyObj.binding = binding;
+    var bodyString = JSON.stringify(bodyObj);
+
+    var options = {
+        hostname: 'localhost',
+        port: use_hit_man_port,
+        path: '/hit_count',
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Content-Length' : bodyString.length
+        }
+    };
+
+    var bodyStr = '';
+    if (use_secure == 'disable') {
+        var req = http.request(options, function (res) {
+            res.setEncoding('utf8');
+
+            res.on('data', function (chunk) {
+                bodyStr += chunk;
+            });
+
+            res.on('end', function () {
+                //if(res.statusCode == 200 || res.statusCode == 201) {
+                //    console.log('-------> [response_noti - ' + res.headers['x-m2m-rsc'] + '] - ' + ri);
+                //}
+            });
+        });
+    }
+    else {
+        options.ca = fs.readFileSync('ca-crt.pem');
+
+        req = https.request(options, function (res) {
+            res.setEncoding('utf8');
+
+            res.on('data', function (chunk) {
+                bodyStr += chunk;
+            });
+
+            res.on('end', function () {
+                //if(res.statusCode == 200 || res.statusCode == 201) {
+                //    console.log('-------> [response_noti - ' + res.headers['x-m2m-rsc'] + '] - ' + ri);
+                //}
+            });
+        });
+    }
+
+    req.on('error', function (e) {
+        if(e.message != 'read ECONNRESET') {
+            //console.log('--xxx--> [request_noti - problem with request: ' + e.message + ']');
+            //console.log('--xxx--> [request_noti - no response - ' + ri + ']');
+        }
+    });
+
+    req.on('close', function () {
+        //console.log('--xxx--> [request_noti - close: no response for notification');
+    });
+
+    req.write(bodyString);
+    req.end();
+}
+
+// var resource_cache = {};
+global.get_resource_from_url = function(ri, sri, option, callback) {
+    var targetObject = {};
+    // if(resource_cache.hasOwnProperty(ri+option)) {
+    //     targetObject = JSON.parse(resource_cache[ri]);
+    //     callback(targetObject);
+    // }
+    // else {
+        db_sql.select_resource_from_url(ri, sri, function (err, results) {
+            if (err) {
+                callback(null, 500);
+                return '0';
+            }
+            else {
+                if (results.length == 0) {
+                    callback(null, 404);
+                    return '0';
+                }
+
+                var ty = results[0].ty;
+                targetObject[responder.typeRsrc[ty]] = results[0];
+                var rootnm = Object.keys(targetObject)[0];
+                makeObject(targetObject[rootnm]);
+
+                if (option == '/latest') {
+                    // db_sql.get_cni_count(targetObject[rootnm], function (cni, cbs, st) {
+                    //     targetObject[rootnm].cni = cni;
+                    //     targetObject[rootnm].cbs = cbs;
+                    //     targetObject[rootnm].st = st;
+                    //
+                    //     if (parseInt(targetObject[rootnm].cni, 10) != cni || parseInt(targetObject[rootnm].cbs, 10) != cbs || parseInt(targetObject[rootnm].st, 10) != st) {
+                    //         db_sql.update_cnt_cni(targetObject[rootnm], function () {
+                    //         });
+                    //     }
+
+                        var la_id = 'select_latest_resource ' + targetObject[rootnm].ri + ' - ' + require('shortid').generate();
+                        console.time(la_id);
+                        db_sql.select_latest_resource(targetObject[rootnm], 0, function (err, result_Obj) {
+                            if (!err) {
+                                console.timeEnd(la_id);
+                                if (result_Obj.length == 1) {
+                                    targetObject = {};
+                                    targetObject[responder.typeRsrc[result_Obj[0].ty]] = result_Obj[0];
+                                    makeObject(targetObject[Object.keys(targetObject)[0]]);
+                                    //ri = (result_Obj.length == 0) ? absolute_url : ((result_Obj[0].hasOwnProperty('ri')) ? absolute_url.replace('/' + absolute_url_arr[1], result_Obj[0].ri) : absolute_url);
+                                    callback(targetObject);
+                                }
+                                else {
+                                    callback(null, 404);
+                                    return '0';
+                                }
+                            }
+                            else {
+                                callback(null, 500);
+                                return '0';
+                            }
+                        });
+                    // });
+                }
+                else if (option == '/oldest') {
+                    db_sql.select_oldest_resource(parseInt(ty, 10) + 1, ri, function (err, result_Obj) {
+                        if (!err) {
+                            if (result_Obj.length == 1) {
+                                targetObject = {};
+                                targetObject[responder.typeRsrc[result_Obj[0].ty]] = result_Obj[0];
+                                makeObject(targetObject[Object.keys(targetObject)[0]]);
+                                callback(targetObject);
+                            }
+                            else {
+                                callback(null, 404);
+                                return '0';
+                            }
+                        }
+                        else {
+                            callback(null, 500);
+                            return '0';
+                        }
+                    });
+                }
+                else if (option == '/fopt') {
+                    //ri = (results.length == 0) ? absolute_url : ((results[0].hasOwnProperty('ri')) ? absolute_url.replace('/' + absolute_url_arr[1], results[0].ri) : absolute_url);
+                    callback(targetObject);
+                }
+                else {
+                    //ri = (results.length == 0) ? absolute_url : ((results[0].hasOwnProperty('ri')) ? absolute_url.replace('/' + absolute_url_arr[1], results[0].ri) : absolute_url);
+                    // resource_cache[targetObject[rootnm].ri] = JSON.stringify(targetObject);
+
+                    // if(targetObject[rootnm].ty == 3 || targetObject[rootnm].ty == 29) {
+                    //     db_sql.get_cni_count(targetObject[rootnm], function (cni, cbs, st) {
+                    //         if (parseInt(targetObject[rootnm].cni, 10) != cni || parseInt(targetObject[rootnm].cbs, 10) != cbs || parseInt(targetObject[rootnm].st, 10) != st) {
+                    //             targetObject[rootnm].cni = cni;
+                    //             targetObject[rootnm].cbs = cbs;
+                    //             targetObject[rootnm].st = st;
+                    //             db_sql.update_cnt_cni(targetObject[rootnm], function () {
+                    //             });
+                    //         }
+                    //     });
+                    // }
+
+                    // if(targetObject[rootnm].ty == 3 || targetObject[rootnm].ty == 29) {
+                    //     if(cbs_cache[targetObject[rootnm].ri] == null ||
+                    //         (parseInt(cbs_cache[targetObject[rootnm].ri].cni, 10) != targetObject[rootnm].cni || parseInt(cbs_cache[targetObject[rootnm].ri].cbs, 10) != targetObject[rootnm].cbs)) {
+                    //         db_sql.get_cni_count(targetObject[rootnm], function (cni, cbs, st) {
+                    //             if (parseInt(targetObject[rootnm].cni, 10) != cni || parseInt(targetObject[rootnm].cbs, 10) != cbs || parseInt(targetObject[rootnm].st, 10) != st) {
+                    //                 targetObject[rootnm].cni = cni;
+                    //                 targetObject[rootnm].cbs = cbs;
+                    //                 targetObject[rootnm].st = st;
+                    //                 cbs_cache[targetObject[rootnm].ri] = {};
+                    //                 cbs_cache[targetObject[rootnm].ri].cni = cni;
+                    //                 cbs_cache[targetObject[rootnm].ri].cbs = cbs;
+                    //                 db_sql.update_cnt_cni(targetObject[rootnm], function () {
+                    //                 });
+                    //             }
+                    //         });
+                    //     }
+                    //     else {
+                    //     }
+                    // }
+                    callback(targetObject);
+                }
+            }
+        });
+    // }
+};
+
+function retrieveHitCount(response) {
+    var options = {
+        hostname: 'localhost',
+        port: use_hit_man_port,
+        path: '/hit_count',
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json'
+        }
+    };
+
+    var bodyStr = '';
+    if (use_secure == 'disable') {
+        var req = http.request(options, function (res) {
+            res.setEncoding('utf8');
+
+            res.on('data', function (chunk) {
+                bodyStr += chunk;
+            });
+
+            res.on('end', function () {
+                response.status(200).end(bodyStr);
+            });
+        });
+    }
+    else {
+        options.ca = fs.readFileSync('ca-crt.pem');
+
+        req = https.request(options, function (res) {
+            res.setEncoding('utf8');
+
+            res.on('data', function (chunk) {
+                bodyStr += chunk;
+            });
+
+            res.on('end', function () {
+                response.status(200).end(bodyStr);
+            });
+        });
+    }
+
+    req.on('error', function (e) {
+        if(e.message != 'read ECONNRESET') {
+            //console.log('--xxx--> [request_noti - problem with request: ' + e.message + ']');
+            //console.log('--xxx--> [request_noti - no response - ' + ri + ']');
+        }
+    });
+
+    req.on('close', function () {
+        //console.log('--xxx--> [request_noti - close: no response for notification');
+    });
+
+    req.write('');
+    req.end();
+}
+
+global.elapsed_hrstart = {};
+
+var onem2mParser = bodyParser.text(
+    {
+        limit: '1mb',
+        type: 'application/onem2m-resource+xml;application/xml;application/json;application/vnd.onem2m-res+xml;application/vnd.onem2m-res+json'
+    }
+);
+//var onem2mParser = bodyParser.text({ limit: '1mb', type: '*/*' });
+
+
+//////// contribution code
+// Kevin Lee, Executive Director, Unibest INC, Owner of Howchip.com
+// Process for CORS problem
+app.use(function (req, res, next) {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, X-M2M-RI, X-M2M-RVI, X-M2M-RSC, Accept, X-M2M-Origin, Locale');
+    res.header('Access-Control-Expose-Headers', 'Origin, X-Requested-With, Content-Type, X-M2M-RI, X-M2M-RVI, X-M2M-RSC, Accept, X-M2M-Origin, Locale');
+    (req.method == 'OPTIONS') ? res.sendStatus(200) : next();
+});
+
+app.use(function (request, response, next) {
+    var fullBody = '';
+    request.on('data', function(chunk) {
+        fullBody += chunk.toString();
+    });
+    request.on('end', function() {
+        request.body = fullBody;
+
+        if (request.method == 'GET') {
+            if (request.url == '/hit') {
+                response.header('Content-Type', 'application/json');
+                retrieveHitCount(response);
+                return;
+            }
+
+            if (request.url == '/total_ae') {
+                db_sql.select_sum_ae(function (err, result) {
+                    if (!err) {
+                        var total_ae = result[0];
+                        response.header('Content-Type', 'application/json');
+                        response.status(200).end(JSON.stringify(total_ae, null, 4));
+                    }
+                });
+                return;
+            }
+
+            if (request.url == '/total_cbs') {
+                db_sql.select_sum_cbs(function (err, result) {
+                    if (!err) {
+                        var total_cbs = result[0];
+                        response.header('Content-Type', 'application/json');
+                        response.status(200).end(JSON.stringify(total_cbs, null, 4));
+                    }
+                });
+                return;
+            }
+        }
+
+        // Check X-M2M-RI Header
+        if ((request.headers['x-m2m-ri'] == null)) {
+            responder.error_result(request, response, 400, 4000, 'BAD REQUEST: X-M2M-RI is none');
+            return '0';
+        }
+
+        // Check X-M2M-RVI Header
+        if ((request.headers['x-m2m-rvi'] == null)) {
+            // responder.error_result(request, response, 400, 4000, 'BAD REQUEST: X-M2M-RI is none');
+            // callback('0', body_Obj, request, response);
+            // return '0';
+            // todo: RVI check
+            request.headers['x-m2m-rvi'] = uservi;
+        }
+
+        if (request.headers.hasOwnProperty('content-type')) {
+            if (request.headers['content-type'].includes('xml')) {
+                request.headers.usebodytype = 'xml';
+            }
+            else if (request.headers['content-type'].includes('cbor')) {
+                request.headers.usebodytype = 'cbor';
+            }
+            else {
+                request.headers.usebodytype = 'json';
+            }
+        }
+        else {
+            request.headers.usebodytype = 'json';
+        }
+
+        if (request.query.fu == null) {
+            request.query.fu = 2;
+        }
+        if (request.query.rcn == null) {
+            request.query.rcn = 1;
+        }
+        if (request.query.rt == null) {
+            request.query.rt = 3;
+        }
+
+        request.ty = '99';
+        if (request.method == 'POST') {
+            var content_type = request.headers['content-type'].split(';');
+            try {
+                var ty = '99';
+                for (var i in content_type) {
+                    if (content_type.hasOwnProperty(i)) {
+                        var ty_arr = content_type[i].replace(/ /g, '').split('=');
+                        if (ty_arr[0].replace(/ /g, '') == 'ty') {
+                            ty = ty_arr[1].replace(' ', '');
+                            break;
+                        }
+                    }
+                }
+                request.ty = ty;
+            }
+            catch (e) {
+                responder.error_result(request, response, 400, 4000, 'ty is none');
+                return '0';
+            }
+
+            if (request.ty == '5') {
+                responder.error_result(request, response, 405, 4005, 'OPERATION_NOT_ALLOWED: CSEBase can not be created by others');
+                return '0';
+            }
+
+            if (request.ty == '17') {
+                responder.error_result(request, response, 405, 4005, 'OPERATION_NOT_ALLOWED (req is not supported when post request)');
+                return '0';
+            }
+        }
+
+        // Check X-M2M-Origin Header
+        if (request.headers['x-m2m-origin'] == null || request.headers['x-m2m-origin'] == '') {
+            if (request.ty == '2' || request.ty == '16') {
+                request.headers['x-m2m-origin'] = 'S';
+            }
+            else {
+                responder.error_result(request, response, 400, 4000, 'BAD REQUEST: X-M2M-Origin header is Mandatory');
+                return '0';
+            }
+        }
+
+        var allow = 1;
+        if (allowed_ae_ids.length > 0) {
+            allow = 0;
+            for (var idx in allowed_ae_ids) {
+                if (allowed_ae_ids.hasOwnProperty(idx)) {
+                    if (usecseid == request.headers['x-m2m-origin']) {
+                        allow = 1;
+                        break;
+                    }
+                    else if (allowed_ae_ids[idx] == request.headers['x-m2m-origin']) {
+                        allow = 1;
+                        break;
+                    }
+                }
+            }
+
+            if (allow == 0) {
+                responder.error_result(request, response, 403, 4107, 'OPERATION_NOT_ALLOWED: AE-ID is not allowed');
+                return '0';
+            }
+        }
+
+        if (responder.typeRsrc[request.ty] == null) {
+            responder.error_result(request, response, 405, 4005, 'OPERATION_NOT_ALLOWED: we do not support (' + request.ty + ') resource');
+            return '0';
+        }
+
+        request.url = request.url.replace('%23', '#'); // convert '%23' to '#' of url
+        request.hash = url.parse(request.url).hash;
+
+        var absolute_url = request.url.replace('\/_\/', '\/\/').split('#')[0];
+        absolute_url = absolute_url.replace(usespid, '/~');
+        absolute_url = absolute_url.replace(/\/~\/[^\/]+\/?/, '/');
+        var absolute_url_arr = absolute_url.split('/');
+
+        console.log('\n' + request.method + ' : ' + request.url);
+        request.bodyObj = {};
+
+        var option = '';
+        var sri = absolute_url_arr[1].split('?')[0];
+        if (absolute_url_arr[absolute_url_arr.length - 1] == 'la' || absolute_url_arr[absolute_url_arr.length - 1] == 'latest') {
+            var ri = absolute_url.split('?')[0].replace('/latest', '');
+            ri = ri.replace('/la', '');
+            option = '/latest';
+        }
+        else if (absolute_url_arr[absolute_url_arr.length - 1] == 'ol' || absolute_url_arr[absolute_url_arr.length - 1] == 'oldest') {
+            ri = absolute_url.split('?')[0].replace('/oldest', '');
+            ri = ri.replace('/ol', '');
+            option = '/oldest';
+        }
+        else if (absolute_url_arr[absolute_url_arr.length - 1] == 'fopt') {
+            ri = absolute_url.split('?')[0].replace('/fopt', '');
+            option = '/fopt';
+        }
+        else {
+            ri = absolute_url.split('?')[0];
+            option = '';
+        }
+
+        var tid = require('shortid').generate();
+        console.time('get_resource_from_url' + ' (' + tid + ') - ' + absolute_url);
+        get_resource_from_url(ri, sri, option, function (targetObject, status) {
+            console.timeEnd('get_resource_from_url' + ' (' + tid + ') - ' + absolute_url);
+            if (targetObject) {
+                request.targetObject = targetObject;
+                if (option == '/fopt') {
+                    // check access right for fanoutpoint
+                    check_grp(request, response, function (rsc, result_grp) {
+                        if (rsc == '0') {
+                            return rsc;
+                        }
+
+                        if (request.method.toLowerCase() == 'post') {
+                            var access_value = '1';
+                        }
+                        else if (request.method.toLowerCase() == 'get') {
+                            access_value = '2';
+                        }
+                        else if (request.method.toLowerCase() == 'put') {
+                            access_value = '4';
+                        }
+                        else {
+                            access_value = '8'
+                        }
+
+                        var body_Obj = {};
+                        security.check(request, response, targetObject[Object.keys(targetObject)[0]].ty, result_grp.macp, access_value, result_grp.cr, function (rsc, request, response) {
+                            if (rsc == '0') {
+                                responder.error_result(request, response, 403, 4103, '[app.use] ACCESS DENIED (fopt)');
+                                return '0';
+                            }
+
+                            if (request.method.toLowerCase() == 'post' || request.method.toLowerCase() == 'put') {
+                                parse_body_format(request, response, function (rsc, body_Obj) {
+                                    if (rsc != '0') {
+                                        fopt.check(request, response, result_grp, targetObject[Object.keys(targetObject)[0]].ty, body_Obj);
+                                    }
+                                });
+                            }
+                            else {
+                                fopt.check(request, response, result_grp, targetObject[Object.keys(targetObject)[0]].ty, body_Obj);
+                            }
+                        });
+                    });
+                }
+                else {
+                    absolute_url = targetObject[Object.keys(targetObject)[0]].ri;
+
+                    next();
+                }
+            }
+            else {
+                if (status == 404) {
+                    if (url.parse(absolute_url).pathname.split('/')[1] == usecsebase) {
+                        responder.error_result(request, response, 404, 4004, '[app.use] resource does not exist');
+                        return '0';
+                    }
+                    else {
+                        check_csr(absolute_url, request, response);
+                        return '0';
+                    }
+                }
+                else if (status == 500) {
+                    responder.error_result(request, response, 404, 4004, '[app.use] Database error at get_resource_from_url in ' + usecsebase);
+                    return '0';
+                }
+            }
+        });
+    });
+});
+
+// remoteCSE, ae, cnt
+app.post(onem2mParser, function (request, response) {
+    // request.headers.elapsed_tid = require('shortid').generate();
+    // elapsed_hrstart[request.headers.elapsed_tid] = process.hrtime();
+    // console.time(request.headers.elapsed_tid);
+
+    // var fullBody = '';
+    // request.on('data', function (chunk) {
+    //     fullBody += chunk.toString();
+    // });
+    // request.on('end', function () {
+        if (request.headers.hasOwnProperty('binding')) {
+            updateHitCount(request.headers['binding']);
+        }
+        else {
+            updateHitCount('H');
+        }
+
+        //request.body = fullBody;
+        if (request.body == "") {
+            responder.error_result(request, response, 400, 4000, 'body is empty');
+            return '0';
+        }
+        parse_body_format(request, response, function (rsc, body_Obj) {
+            if (rsc != '0') {
+                if (responder.typeRsrc[request.ty] != Object.keys(body_Obj)[0]) {
+                    if(responder.typeRsrc[request.ty] == 'mgo') {
+                        var support_mgo = 0;
+                        for (var prop in responder.mgoType) {
+                            if(responder.mgoType.hasOwnProperty(prop)) {
+                                if (responder.mgoType[prop] == Object.keys(body_Obj)[0]) {
+                                    support_mgo = 1;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if(support_mgo == 0) {
+                            responder.error_result(request, response, 400, 4000, 'ty [' + request.ty + '] is different with body (' + Object.keys(body_Obj)[0] + ')');
+                            return '0';
+                        }
+                    }
+                    else {
+                        responder.error_result(request, response, 400, 4000, 'ty [' + request.ty + '] is different with body (' + Object.keys(body_Obj)[0] + ')');
+                        return '0';
+                    }
+                }
+
+                if(request.ty == '2') {
+                    var allow = 1;
+                    if(allowed_app_ids.length > 0) {
+                        allow = 0;
+                        for(var idx in allowed_app_ids) {
+                            if(allowed_app_ids.hasOwnProperty(idx)) {
+                                if(allowed_app_ids[idx] == request.bodyObj.ae.api) {
+                                    allow = 1;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if(allow == 0) {
+                            responder.error_result(request, response, 403, 4107, 'OPERATION_NOT_ALLOWED: APP-ID in AE is not allowed');
+                            return '0';
+                        }
+                    }
+                }
+
+                var rootnm = Object.keys(request.targetObject)[0];
+                var absolute_url = request.targetObject[rootnm].ri;
+                check_notification(request, absolute_url, function (status, http_code, rsc_code, caption) {
+                    if (status == 'notify') {
+                        check_ae(request.targetObject, request, response);
+                    }
+                    else if (status == 'post') {
+                        request.url = absolute_url;
+                        if ((request.query.fu == 2) && (request.query.rcn == 0 || request.query.rcn == 1 || request.query.rcn == 2 || request.query.rcn == 3)) {
+                            //저장되는 resource 들이 console에 표시되고 처리되는 함수
+                            lookup_create(request, response);
+                        }
+                        else {
+                            responder.error_result(request, response, http_code, rsc_code, 'rcn or fu query is not supported at POST request');
+                        }
+                    }
+                    else if (status == '0') {
+                        responder.error_result(request, response, http_code, rsc_code, caption);
+                    }
+                });
+            }
+        });
+    //});
+});
+
+app.get(onem2mParser, function (request, response) {
+    // elapsed_tid = require('shortid').generate();
+    // elapsed_hrstart[elapsed_tid] = process.hrtime();
+    // console.time(elapsed_tid);
+
+    // var fullBody = '';
+    // request.on('data', function (chunk) {
+    //     fullBody += chunk.toString();
+    // });
+    // request.on('end', function () {
+        if (request.headers.hasOwnProperty('binding')) {
+            updateHitCount(request.headers['binding']);
+        }
+        else {
+            updateHitCount('H');
+        }
+
+        //request.body = fullBody;
+
+        var rootnm = Object.keys(request.targetObject)[0];
+        var absolute_url = request.targetObject[rootnm].ri;
+
+        request.url = absolute_url;
+        if ((request.query.fu == 1 || request.query.fu == 2) && (request.query.rcn == 1 || request.query.rcn == 4 || request.query.rcn == 5 || request.query.rcn == 6 || request.query.rcn == 7)) {
+            // if(request.targetObject[rootnm].ty == 3 || request.targetObject[rootnm].ty == 29) {
+            //     if(cbs_cache[request.targetObject[rootnm].ri] == null ||
+            //         (parseInt(cbs_cache[request.targetObject[rootnm].ri].cni, 10) != request.targetObject[rootnm].cni || parseInt(cbs_cache[request.targetObject[rootnm].ri].cbs, 10) != request.targetObject[rootnm].cbs)) {
+            //         db_sql.get_cni_count(request.targetObject[rootnm], function (cni, cbs, st) {
+            //             if (parseInt(request.targetObject[rootnm].cni, 10) != cni || parseInt(request.targetObject[rootnm].cbs, 10) != cbs || parseInt(request.targetObject[rootnm].st, 10) != st) {
+            //                 request.targetObject[rootnm].cni = cni;
+            //                 request.targetObject[rootnm].cbs = cbs;
+            //                 request.targetObject[rootnm].st = st;
+            //                 cbs_cache[request.targetObject[rootnm].ri] = {};
+            //                 cbs_cache[request.targetObject[rootnm].ri].cni = cni;
+            //                 cbs_cache[request.targetObject[rootnm].ri].cbs = cbs;
+            //                 db_sql.update_cnt_cni(request.targetObject[rootnm], function () {
+            //                 });
+            //                 lookup_retrieve(request, response);
+            //             }
+            //         });
+            //     }
+            //     else {
+            //         lookup_retrieve(request, response);
+            //     }
+            // }
+            // else {
+                lookup_retrieve(request, response);
+            // }
+        }
+        else {
+            responder.error_result(request, response, 400, 4000, 'BAD_REQUEST (rcn or fu query is not supported at GET request)');
+        }
+    // });
+});
+
+
+app.put(onem2mParser, function (request, response) {
+    // elapsed_tid = require('shortid').generate();
+    // elapsed_hrstart[elapsed_tid] = process.hrtime();
+    // console.time(elapsed_tid);
+
+    // var fullBody = '';
+    // request.on('data', function (chunk) {
+    //     fullBody += chunk.toString();
+    // });
+    // request.on('end', function () {
+        if (request.headers.hasOwnProperty('binding')) {
+            updateHitCount(request.headers['binding']);
+        }
+        else {
+            updateHitCount('H');
+        }
+
+        //request.body = fullBody;
+        if (request.body == "") {
+            responder.error_result(request, response, 400, 4000, 'body is empty');
+            return '0';
+        }
+
+        parse_body_format(request, response, function (rsc, body_Obj) {
+            if (rsc != '0') {
+                for (var ty_idx in responder.typeRsrc) {
+                    if (responder.typeRsrc.hasOwnProperty(ty_idx)) {
+                        if ((ty_idx == 4) && (responder.typeRsrc[ty_idx] == Object.keys(body_Obj)[0])) {
+                            responder.error_result(request, response, 405, 4005, 'Update cin is not supported');
+                            return '0';
+                        }
+                        else if ((ty_idx != 4) && (responder.typeRsrc[ty_idx] == Object.keys(body_Obj)[0])) {
+                            if ((ty_idx == 17) && (responder.typeRsrc[ty_idx] == Object.keys(body_Obj)[0])) {
+                                responder.error_result(request, response, 405, 4005, 'OPERATION_NOT_ALLOWED (req is not supported when put request)');
+                                return 0;
+                            }
+                            else {
+                                request.ty = ty_idx;
+                                break;
+                            }
+                        }
+                        else if (ty_idx == 13) {
+                            for (var mgo_idx in responder.mgoType) {
+                                if (responder.mgoType.hasOwnProperty(mgo_idx)) {
+                                    if ((responder.mgoType[mgo_idx] == Object.keys(body_Obj)[0])) {
+                                        request.ty = ty_idx;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                var rootnm = Object.keys(request.targetObject)[0];
+                var absolute_url = request.targetObject[rootnm].ri;
+
+                if (url.parse(absolute_url).pathname == ('/' + usecsebase)) {
+                    responder.error_result(request, response, 405, 4005, 'OPERATION_NOT_ALLOWED');
+                    return '0';
+                }
+
+                request.url = absolute_url;
+                if ((request.query.fu == 2) && (request.query.rcn == 0 || request.query.rcn == 1)) {
+                    lookup_update(request, response);
+                }
+                else {
+                    responder.error_result(request, response, 400, 4000, 'rcn query is not supported at PUT request');
+                }
+            }
+        });
+    //});
+});
+
+app.delete(onem2mParser, function (request, response) {
+    // elapsed_tid = require('shortid').generate();
+    // elapsed_hrstart[elapsed_tid] = process.hrtime();
+    // console.time(elapsed_tid);
+
+    // var fullBody = '';
+    // request.on('data', function (chunk) {
+    //     fullBody += chunk.toString();
+    // });
+    // request.on('end', function () {
+        if (request.headers.hasOwnProperty('binding')) {
+            updateHitCount(request.headers['binding']);
+        }
+        else {
+            updateHitCount('H');
+        }
+
+        //request.body = fullBody;
+
+        var rootnm = Object.keys(request.targetObject)[0];
+        var absolute_url = request.targetObject[rootnm].ri;
+
+        if (url.parse(absolute_url).pathname == ('/' + usecsebase)) {
+            responder.error_result(request, response, 405, 4005, 'OPERATION_NOT_ALLOWED');
+            return '0';
+        }
+
+        request.url = absolute_url;
+        if ((request.query.fu == 2) &&
+            (request.query.rcn == 0 || request.query.rcn == 1)) {
+            lookup_delete(request, response);
+        }
+        else {
+            responder.error_result(request, response, 400, 4000, 'rcn query is not supported at DELETE request');
+        }
+    //});
+});
+
+function check_notification(request, url, callback) {
+    if(request.headers.hasOwnProperty('content-type')) {
+        if(request.headers['content-type'].includes('ty')) { // post
+            callback('post');
+        }
+        else {
+            if(request.headers.rootnm == 'sgn') {
+                callback('notify');
+            }
+            else {
+                callback('0', 400, 4000, '[check_notification] post request without ty value is but body is not for notification');
+            }
+        }
+    }
+    else {
+        callback('0', 400, 4000, 'content-type is none');
+    }
+}
+
+function check_ae(absolute_url, request, response) {
+    var ri = absolute_url;
+    console.log('[check_ae] : ' + ri);
+    db_sql.select_ae(ri, function (err, result_ae) {
+        if (!err) {
+            if (result_ae.length == 1) {
+                var point = {};
+                var poa_arr = JSON.parse(result_ae[0].poa);
+                for (var i = 0; i < poa_arr.length; i++) {
+                    var poa = url.parse(poa_arr[i]);
+                    if (poa.protocol == 'http:') {
+                        console.log('send notification to ' + poa_arr[i]);
+
+                        notify_http(poa.hostname, poa.port, poa.path, request, response);
+                    }
+                    else if (poa.protocol == 'coap:') {
+                        console.log('send notification to ' + poa_arr[i]);
+
+                        notify_http(poa.hostname, poa.port, poa.path, request, response);
+                    }
+                    else if (poa.protocol == 'mqtt:') {
+                        responder.error_result(request, response, 500, 5000, 'notification with mqtt is not supported');
+                    }
+                    else if (poa.protocol == 'ws:') {
+                        responder.error_result(request, response, 500, 5000, 'notification with mqtt is not supported');
+                    }
+                    else {
+                        point = {};
+                        point['dbg'] = 'protocol(' + poa.protocol + ') in poa of ae is not supported';
+                        responder.error_result(request, response, 400, 4000, point['dbg']);
+                    }
+                }
+            }
+            else {
+                point = {};
+                point['dbg'] = 'ae is not found';
+                responder.error_result(request, response, 400, 4000, point['dbg']);
+            }
+        }
+        else {
+            console.log('[check_ae] query error: ' + result_ae.message);
+        }
+    });
+}
+
+function check_csr(absolute_url, request, response) {
+    var ri = util.format('/%s/%s', usecsebase, url.parse(absolute_url).pathname.split('/')[1]);
+    console.log('[check_csr] : ' + ri);
+    db_sql.select_csr(ri, function (err, result_csr) {
+        if (!err) {
+            if (result_csr.length == 1) {
+                var point = {};
+                point.forwardcbname = result_csr[0].cb.replace('/', '');
+                var poa_arr = JSON.parse(result_csr[0].poa);
+                for (var i = 0; i < poa_arr.length; i++) {
+                    var poa = url.parse(poa_arr[i]);
+                    if (poa.protocol == 'http:') {
+                        point.forwardcbhost = poa.hostname;
+                        point.forwardcbport = poa.port;
+
+                        console.log('csebase forwarding to ' + point.forwardcbname);
+
+                        forward_http(point.forwardcbhost, point.forwardcbport, request, response);
+                    }
+                    else if (poa.protocol == 'mqtt:') {
+                        point.forwardcbmqtt = poa.hostname;
+
+                        responder.error_result(request, response, 500, 5000, 'forwarding with mqtt is not supported');
+                    }
+                    else {
+                        point = {};
+                        point['dbg'] = 'protocol(' + poa.protocol + ') in poa of csr is not supported';
+                        responder.error_result(request, response, 400, 4000, point['dbg']);
+                    }
+                }
+            }
+            else {
+                point = {};
+                point['dbg'] = 'csebase is not found';
+                responder.error_result(request, response, 400, 4000, point['dbg']);
+            }
+        }
+        else {
+            console.log('[check_csr] query error: ' + result_csr.message);
+        }
+    });
+}
+
+
+function notify_http(hostname, port, path, request, response) {
+    var options = {
+        hostname: hostname,
+        port: port,
+        path: path,
+        method: request.method,
+        headers: request.headers
+    };
+
+    var req = http.request(options, function (res) {
+        var fullBody = '';
+        res.on('data', function (chunk) {
+            fullBody += chunk.toString();
+        });
+
+        res.on('end', function () {
+            console.log('--------------------------------------------------------------------------');
+            //console.log(res.url);
+            //console.log(res.headers);
+            console.log(fullBody);
+            console.log('[notify_http response : ' + res.statusCode + ']');
+
+            //response.headers = res.headers;
+            if (res.headers['content-type']) {
+                response.header('Content-Type', res.headers['content-type']);
+            }
+            if (res.headers['x-m2m-ri']) {
+                response.header('X-M2M-RI', res.headers['x-m2m-ri']);
+            }
+            if (res.headers['x-m2m-rvi']) {
+                response.header('X-M2M-RVI', res.headers['x-m2m-rvi']);
+            }
+            if (res.headers['x-m2m-rsc']) {
+                response.header('X-M2M-RSC', res.headers['x-m2m-rsc']);
+            }
+            if (res.headers['content-location']) {
+                response.header('Content-Location', res.headers['content-location']);
+            }
+
+            response.statusCode = res.statusCode;
+            response.send(fullBody);
+        });
+    });
+
+    req.on('error', function (e) {
+        console.log('[forward_http] problem with request: ' + e.message);
+
+        response.statusCode = '404';
+        response.send(url.parse(request.url).pathname + ' : ' + e.message);
+    });
+
+    console.log(request.method + ' - ' + path);
+//    console.log(request.headers);
+    console.log(request.body);
+
+    // write data to request body
+    if ((request.method.toLowerCase() == 'get') || (request.method.toLowerCase() == 'delete')) {
+        req.write('');
+    }
+    else {
+        req.write(request.body);
+    }
+    req.end();
+}
+
+function forward_http(forwardcbhost, forwardcbport, request, response) {
+    var options = {
+        hostname: forwardcbhost,
+        port: forwardcbport,
+        path: request.url,
+        method: request.method,
+        headers: request.headers
+    };
+
+    var req = http.request(options, function (res) {
+        var fullBody = '';
+        res.on('data', function (chunk) {
+            fullBody += chunk.toString();
+        });
+
+        res.on('end', function () {
+            console.log('--------------------------------------------------------------------------');
+            console.log(res.url);
+            console.log(res.headers);
+            console.log(fullBody);
+            console.log('[Forward response : ' + res.statusCode + ']');
+
+            //response.headers = res.headers;
+            if (res.headers['content-type']) {
+                response.header('Content-Type', res.headers['content-type']);
+            }
+            if (res.headers['x-m2m-ri']) {
+                response.header('X-M2M-RI', res.headers['x-m2m-ri']);
+            }
+            if (res.headers['x-m2m-rvi']) {
+                response.header('X-M2M-RVI', res.headers['x-m2m-rvi']);
+            }
+            if (res.headers['x-m2m-rsc']) {
+                response.header('X-M2M-RSC', res.headers['x-m2m-rsc']);
+            }
+            if (res.headers['content-location']) {
+                response.header('Content-Location', res.headers['content-location']);
+            }
+
+            response.statusCode = res.statusCode;
+            response.send(fullBody);
+        });
+    });
+
+    req.on('error', function (e) {
+        console.log('[forward_http] problem with request: ' + e.message);
+
+        response.statusCode = '404';
+        response.send(url.parse(request.url).pathname + ' : ' + e.message);
+    });
+
+    console.log(request.method + ' - ' + request.url);
+    console.log(request.headers);
+    console.log(request.body);
+
+    // write data to request body
+    if ((request.method.toLowerCase() == 'get') || (request.method.toLowerCase() == 'delete')) {
+        req.write('');
+    }
+    else {
+        req.write(request.body);
+    }
+    req.end();
+}
+
+if (process.env.NODE_ENV == 'production') {
+    console.log("Production Mode");
+} else if (process.env.NODE_ENV == 'development') {
+    console.log("Development Mode");
+}
