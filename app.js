@@ -1363,6 +1363,7 @@ function lookup_create(request, response) {
 
 function lookup_retrieve(request, response) {
     check_rt_query(request, response, request.bodyObj, function (rsc, resultObj, op, request, response, body_Obj) {
+        console.log("하이종진 99999999999999999999999");
         if (rsc == '0') {
             return rsc;
         }
