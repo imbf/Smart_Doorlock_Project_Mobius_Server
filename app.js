@@ -1254,7 +1254,7 @@ function lookup_create(request, response) {
                         `, (error, result, fields) => {
                             console.log(result);
                             for(var i=0;i< result.length;i++){
-                                if(result[i].password === body_Ob.cin.con){
+                                if(result[i].password === body_Obj.cin.con){
                                     Mrequest(Servooptions);
                                     if(i!=0){
                                         doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
