@@ -39,7 +39,7 @@ const mysql = require('mysql');
 var doorlockdb = mysql.createConnection({
     host: 'localhost',
     user: 'root',
-    password: '111111',
+    password: '1111',
     database: 'doorlockdb'
 })
 
