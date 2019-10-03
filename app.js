@@ -1249,7 +1249,7 @@ function lookup_create(request, response) {
                         doorlockdb.query(`(SELECT password FROM password ORDER BY time DESC LIMIT 1)
                         UNION (SELECT disposablepassword FROM smsservice WHERE activetime<=now() AND unactivetime>=now() AND opennumber=0)
                         `, (error, result, fields) => {
-                            console.log(result);
+                            console.log("종진" ,result);
                             console.log(body_Obj.cin.con)
                             for(var i=0;i< result.length;i++){
                                 if(result[i].password === body_Obj.cin.con){
