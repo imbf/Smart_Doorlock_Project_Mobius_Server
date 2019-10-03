@@ -49,7 +49,7 @@ const Mrequest = require('request');
 var mqtt = require('mqtt');
 
 var Servooptions = {
-    uri:'http://192.168.0.33:7579/Mobius/lock/update',  
+    uri:'http://168.131.35.103:7579/Mobius/lock/update',  
     method: 'POST',
     followRedirect:true,
     maxRedirects:10,
@@ -461,7 +461,6 @@ if (use_clustering) {
             console.log('worker' + worker.pid + ' died --> start again');
             cluster.fork();
         });
-        console.log("하이종진 1111111111111111111111");
         db.connect(usedbhost, 3306, 'root', usedbpass, function (rsc) {
             if (rsc == '1') {
                 db_sql.set_tuning(function (err, results) {
@@ -486,7 +485,6 @@ if (use_clustering) {
                         require('./pxy_ws');
                         require('./sgn_man');
                         require('./cnt_man');
-                        console.log("하이종진 2222222222222222222");
                         if (usecsetype == 'mn' || usecsetype == 'asn') {
                             global.refreshIntervalId = setInterval(function () {
                                 csr_custom.emit('register_remoteCSE');
@@ -532,7 +530,6 @@ if (use_clustering) {
         // });
 
         db.connect(usedbhost, 3306, 'root', usedbpass, function (rsc) {
-            console.log("하이종진 3333333333333333333333");
             if (rsc == '1') {
                 if(use_secure === 'disable') {
                     http.globalAgent.maxSockets = 1000000;
