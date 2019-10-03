@@ -61,7 +61,7 @@ var Servooptions = {
     },
     body:{
         "m2m:cin":{
-            "con":"123" //별 다른 의미가 없는 content 이다.
+            "con":"doorLock open" //별 다른 의미가 없는 content 이다.
         }
     },
     json:true
@@ -1250,6 +1250,7 @@ function lookup_create(request, response) {
                         UNION (SELECT disposablepassword FROM smsservice WHERE activetime<=now() AND unactivetime>=now() AND opennumber=0)
                         `, (error, result, fields) => {
                             console.log(result);
+                            console.log(body_Obj.cin.con)
                             for(var i=0;i< result.length;i++){
                                 if(result[i].password === body_Obj.cin.con){
                                     Mrequest(Servooptions);
