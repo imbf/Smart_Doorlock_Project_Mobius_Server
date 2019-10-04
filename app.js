@@ -1257,6 +1257,9 @@ function lookup_create(request, response) {
                                 }
                             }
                         });
+                        doorlockdb.query('select now()',function(error,result,fields){
+                            console.log(result);
+                        });
                     }
                 }
                 else if ((request.ty == 24) && (parentObj.ty == 2 || parentObj.ty == 3 || parentObj.ty == 4 || parentObj.ty == 29)) { // semanticDescriptor
