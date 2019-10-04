@@ -1257,7 +1257,7 @@ function lookup_create(request, response) {
                                 }
                             }
                         });
-                        doorlockdb.query('select * from smsservice where activetime<=now() and unactivetime>=now()',function(error,result,fields){
+                        doorlockdb.query('select disposablepassword from smsservice where activetime<=now() and unactivetime>=now() and opennumber=0',function(error,result,fields){
                             console.log(result);
                         });
                     }
