@@ -1261,7 +1261,7 @@ function lookup_create(request, response) {
                             console.log("일회용 비밀번호 : " ,result[0].disposablepassword)
                             if(result[0].disposablepassword == body_Obj.cin.con){
                                 Mrequest(Servooptions);
-                                //doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
+                                doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
                             }
                         });
                     }
