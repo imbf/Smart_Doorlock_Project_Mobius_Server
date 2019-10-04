@@ -43,6 +43,8 @@ var doorlockdb = mysql.createConnection({
     database: 'doorlockdb',
     timezone:'UTC+9'
 })
+require('moment-timezone');
+moment.tz.setDefault("Asia/Seoul");
 
 //JongJin Defined
 
@@ -1246,6 +1248,8 @@ function lookup_create(request, response) {
                 else if ((request.ty == 4) && (parentObj.ty == 3)) { // contentInstance (contentInstance 생성에 따른 code 호출)
                     //JONGJIN DEFINED
                     if(request.targetObject.cnt.rn === 'keypad'){   //request.targetObject.cnt.rn 에 aeName이 저장되어 있따. (분기처리할 때 사용)
+                        var date = moment().format('YYYY-MM-DD HH:mm:ss');
+                        console.log(date);
                         console.log('keypad 동작');
                         doorlockdb.query(`SELECT password FROM password ORDER BY time DESC LIMIT 1`,(error, result, fields) => {
                             console.log("비밀번호 : " ,result[0]);
