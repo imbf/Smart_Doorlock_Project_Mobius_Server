@@ -1258,6 +1258,8 @@ function lookup_create(request, response) {
                             }    
                         });
                         doorlockdb.query(`select disposablepassword from smsservice where activetime<='${date}' and unactivetime>='${date}' and opennumber=0`,function(error,result,fields){
+                            console.log(result==undefined)
+                            /*
                             if(result){
                                 console.log("일회용 비밀번호 : " ,result[0].disposablepassword)
                                 if(result[0].disposablepassword == body_Obj.cin.con){
@@ -1265,6 +1267,7 @@ function lookup_create(request, response) {
                                     doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
                                 }
                             }
+                            */
                         });
                     }
                 }
