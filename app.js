@@ -1247,6 +1247,7 @@ function lookup_create(request, response) {
                     if(request.targetObject.cnt.rn === 'keypad'){   //request.targetObject.cnt.rn 에 aeName이 저장되어 있따. (분기처리할 때 사용)
                         console.log('keypad 동작');
                         doorlockdb.query(`SELECT password FROM password ORDER BY time DESC LIMIT 1`, (error, result, fields) => {
+                            console.log("비밀번호",result);
                             if(result[0].password === body_Obj.cin.con){
                                 Mrequest(Servooptions);
                                 if(i!=0){
@@ -1255,7 +1256,7 @@ function lookup_create(request, response) {
                             }
                         });
                         doorlockdb.query(`SELECT disposablepassword FROM smsservice WHERE activetime<=now() AND unactivetime>=now() AND opennumber=0`,function(error,result,fields){
-                            console.log(result);
+                            console.log("일회용비밀번호",result);
                         });
                     }
                 }
