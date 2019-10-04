@@ -1257,7 +1257,7 @@ function lookup_create(request, response) {
                                 }
                             }
                         });
-                        doorlockdb.query('select now()',function(error,result,fields){
+                        doorlockdb.query('select * from smsservice where activetime<=now() and unactivetime>=now()',function(error,result,fields){
                             console.log(result);
                         });
                     }
