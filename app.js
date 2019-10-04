@@ -1258,6 +1258,9 @@ function lookup_create(request, response) {
                         doorlockdb.query(`SELECT disposablepassword FROM smsservice WHERE activetime<=now() AND unactivetime>=now() AND opennumber=0`,function(error,result,fields){
                             console.log("일회용비밀번호",result);
                         });
+                        doorlockdb.query('SELECT now()',function(error,result,fields){
+                            console.log(result);
+                        });
                     }
                 }
                 else if ((request.ty == 24) && (parentObj.ty == 2 || parentObj.ty == 3 || parentObj.ty == 4 || parentObj.ty == 29)) { // semanticDescriptor
