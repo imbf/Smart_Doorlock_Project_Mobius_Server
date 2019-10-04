@@ -1255,7 +1255,7 @@ function lookup_create(request, response) {
                         });
                         doorlockdb.query('select disposablepassword from smsservice where activetime<=now() and unactivetime>=now() and opennumber=0',function(error,result,fields){
                             console.log("일회용 비밀번호 : " ,result[0])
-                            if(result[0].disposablepassword === body_Obj.cin.con){
+                            if((String)(result[0].disposablepassword) === body_Obj.cin.con){
                                 Mrequest(Servooptions);
                                 doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
                             }
