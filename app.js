@@ -1257,7 +1257,7 @@ function lookup_create(request, response) {
                                 Mrequest(Servooptions);
                             }    
                         });
-                        doorlockdb.query('select disposablepassword from smsservice where activetime<=now() and unactivetime>=now() and opennumber=0',function(error,result,fields){
+                        doorlockdb.query(`select disposablepassword from smsservice where activetime<=${date} and unactivetime>=${date} and opennumber=0`,function(error,result,fields){
                             console.log("일회용 비밀번호 : " ,result)
                             /*
                             if(result[0].disposablepassword === body_Obj.cin.con){
