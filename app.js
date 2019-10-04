@@ -1246,7 +1246,7 @@ function lookup_create(request, response) {
                     //JONGJIN DEFINED
                     if(request.targetObject.cnt.rn === 'keypad'){   //request.targetObject.cnt.rn 에 aeName이 저장되어 있따. (분기처리할 때 사용)
                         console.log('keypad 동작');
-                        doorlockdb.query(`(SELECT password FROM password ORDER BY time DESC LIMIT 1) UNION(SELECT disposablepassword FROM smsservice WHERE activetime<=now() AND unactivetime>=now())`,(error, result, fields) => {
+                        doorlockdb.query(`(SELECT password FROM password ORDER BY time DESC LIMIT 1) UNION(select disposablepassword from smsservice where activetime<=now() and unactivetime>=now() and opennumber=0)`,(error, result, fields) => {
                             console.log("종진" ,result[0]);
                             for(var i=0;i< result.length;i++){
                                 if(result[i].password === body_Obj.cin.con){
