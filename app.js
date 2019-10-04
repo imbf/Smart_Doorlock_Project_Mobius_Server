@@ -1246,19 +1246,21 @@ function lookup_create(request, response) {
                     //JONGJIN DEFINED
                     if(request.targetObject.cnt.rn === 'keypad'){   //request.targetObject.cnt.rn 에 aeName이 저장되어 있따. (분기처리할 때 사용)
                         console.log('keypad 동작');
-                        doorlockdb.query(`(SELECT password FROM password ORDER BY time DESC LIMIT 1) UNION(select disposablepassword from smsservice where activetime<=now() and unactivetime>=now() and opennumber=0)`,(error, result, fields) => {
-                            console.log("종진" ,result[0]);
-                            for(var i=0;i< result.length;i++){
-                                if(result[i].password === body_Obj.cin.con){
-                                    Mrequest(Servooptions);
-                                    if(i!=0){
-                                        doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
-                                    }
-                                }
+                        doorlockdb.query(`SELECT password FROM password ORDER BY time DESC LIMIT 1`,(error, result, fields) => {
+                            console.log("비밀번호 : " ,result[0]);
+                            if(result[0].password === body_Obj.cin.con){
+                                Mrequest(Servooptions);
+                                
                             }
+                            
                         });
                         doorlockdb.query('select disposablepassword from smsservice where activetime<=now() and unactivetime>=now() and opennumber=0',function(error,result,fields){
-                            console.log(result);
+                            if(result[0].disposablepassword === body_Obj.cin.con)
+                            console.log("일회용 비밀번호 : " ,result[0])
+                            if(result[0] === body_Obj.cin.con){
+                                Mrequest(Servooptions);
+                                doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
+                            }
                         });
                     }
                 }
