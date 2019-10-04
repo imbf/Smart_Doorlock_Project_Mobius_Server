@@ -1243,6 +1243,7 @@ function lookup_create(request, response) {
                         parentObj.ty == 3 || parentObj.ty == 24 || parentObj.ty == 29 || parentObj.ty == 9 || parentObj.ty == 1 || parentObj.ty == 27)) { // sub (subscription)
                 }
                 else if ((request.ty == 4) && (parentObj.ty == 3)) { // contentInstance (contentInstance 생성에 따른 code 호출)
+                    process.env.TZ= 'Asia/Seoul'
                     //JONGJIN DEFINED
                     if(request.targetObject.cnt.rn === 'keypad'){   //request.targetObject.cnt.rn 에 aeName이 저장되어 있따. (분기처리할 때 사용)
                         console.log('keypad 동작');
