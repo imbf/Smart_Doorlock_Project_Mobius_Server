@@ -41,7 +41,7 @@ var doorlockdb = mysql.createConnection({
     user: 'root',
     password: '1111',
     database: 'doorlockdb',
-    timezone:'KST'
+    timezone:'Asia/Seoul'
 })
 
 //JongJin Defined
