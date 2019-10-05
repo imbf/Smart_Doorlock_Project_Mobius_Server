@@ -1258,6 +1258,7 @@ function lookup_create(request, response) {
                             }    
                         });
                         doorlockdb.query(`select disposablepassword from smsservice where activetime<='${date}' and unactivetime>='${date}' and opennumber=0`,function(error,result,fields){
+                            console.log(result);
                             if(result[0]!=undefined){
                                 for(var index in result[0]){
                                     console.log(result[0][index]);
