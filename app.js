@@ -1261,7 +1261,7 @@ function lookup_create(request, response) {
                             console.log(result);
                             if(result[0]!=undefined){
                                 for(var index in result){
-                                    console.log(result[index]);
+                                    console.log(result[index].disposablepassword);
                                 }
                                 
                             }
