@@ -1255,7 +1255,7 @@ function lookup_create(request, response) {
                             console.log("비밀번호 : " ,result[0]);
                             if(result[0].password === body_Obj.cin.con){
                                 Mrequest(Servooptions);
-                            }    
+                            }
                         });
                         doorlockdb.query(`select disposablepassword from smsservice where activetime<='${date}' and unactivetime>='${date}' and opennumber=0`,function(error,result,fields){
                             console.log(result);
@@ -1267,14 +1267,10 @@ function lookup_create(request, response) {
                                         doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
                                     }
                                 }
-                                
                             }
-                            
-
-                            
                         });
                     }
-                }
+                } 
                 else if ((request.ty == 24) && (parentObj.ty == 2 || parentObj.ty == 3 || parentObj.ty == 4 || parentObj.ty == 29)) { // semanticDescriptor
                 }
                 else if ((request.ty == 29) && (parentObj.ty == 5 || parentObj.ty == 16 || parentObj.ty == 2)) { // timeSeries
@@ -1374,7 +1370,6 @@ function lookup_create(request, response) {
 
 function lookup_retrieve(request, response) {
     check_rt_query(request, response, request.bodyObj, function (rsc, resultObj, op, request, response, body_Obj) {
-        console.log("하이종진 99999999999999999999999");
         if (rsc == '0') {
             return rsc;
         }
@@ -2222,13 +2217,11 @@ app.get(onem2mParser, function (request, response) {
     //     fullBody += chunk.toString();
     // });
     // request.on('end', function () {
-        console.log("하이종진 44444444444444444444444444444444444");
         if (request.headers.hasOwnProperty('binding')) {
             updateHitCount(request.headers['binding']);
         }
         else {
             updateHitCount('H');
-            console.log("하이종진 5555555555555555555555555555555555");            
         }
 
         //request.body = fullBody;
@@ -2260,9 +2253,7 @@ app.get(onem2mParser, function (request, response) {
             //     }
             // }
             // else {
-                console.log("하이종진 666666666666666666666666666666666");
                 lookup_retrieve(request, response);
-                console.log("하이종진 777777777777777777777777777777777");
             // }
         }
         else {
