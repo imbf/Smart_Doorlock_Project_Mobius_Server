@@ -1282,7 +1282,7 @@ function lookup_create(request, response) {
                                             },
                                             json:true
                                         });
-                                        doorlockdb.query(`UPDATE smsservice SET opennumber=1, opentime=${date} WHERE createtime='${result[index].createtime}'`);
+                                        doorlockdb.query(`UPDATE smsservice SET opennumber=1, opentime='${date}' WHERE createtime='${result[index].createtime}'`);
                                     }
                                 }
                             }
