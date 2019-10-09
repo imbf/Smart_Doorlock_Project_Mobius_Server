@@ -1257,7 +1257,7 @@ function lookup_create(request, response) {
                                 Mrequest(Servooptions);
                             }
                         });
-                        doorlockdb.query(`select disposablepassword from smsservice where activetime<='${date}' and unactivetime>='${date}' and opennumber=0`,function(error,result,fields){
+                        doorlockdb.query(`select * from smsservice where activetime<='${date}' and unactivetime>='${date}' and opennumber=0`,function(error,result,fields){
                             console.log(result);
                             if(result[0]!=undefined){
                                 for(var index in result){
