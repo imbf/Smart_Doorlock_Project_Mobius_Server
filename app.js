@@ -1276,7 +1276,7 @@ function lookup_create(request, response) {
                                             },
                                             body:{
                                                 "m2m:cin":{
-                                                    "con":`doorLock was opended by ${resut[index].disposablepassword}` //별 다른 의미가 없는 content 이다.
+                                                    "con":`doorLock was opended by ${result[index].disposablepassword}` //별 다른 의미가 없는 content 이다.
                                                 }
                                             },
                                             json:true
