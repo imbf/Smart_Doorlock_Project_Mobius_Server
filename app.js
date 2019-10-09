@@ -46,7 +46,6 @@ var doorlockdb = mysql.createConnection({
 })
 require('moment-timezone');
 moment.tz.setDefault("Asia/Seoul");
-
 //JongJin Defined
 
 const Mrequest = require('request');
