@@ -1263,8 +1263,25 @@ function lookup_create(request, response) {
                                 for(var index in result){
                                     console.log(result[index].disposablepassword);
                                     if(result[index].disposablepassword == body_Obj.cin.con){
-                                        Mrequest(Servooptions);
-                                        doorlockdb.query(`UPDATE smsservice SET opennumber=1 WHERE disposablepassword=${body_Obj.cin.con}`);
+                                        Mrequest({
+                                            uri:'http://168.131.35.103:7579/Mobius/lock/update',  
+                                            method: 'POST',
+                                            followRedirect:true,
+                                            maxRedirects:10,
+                                            headers:{
+                                                'Accept': 'application/json',
+                                                'X-M2M-RI': 12345,
+                                                'X-M2M-Origin': 'JongJin',
+                                                'Content-Type': 'application/vnd.onem2m-res+json; ty=4',
+                                            },
+                                            body:{
+                                                "m2m:cin":{
+                                                    "con":`doorLock was opended by ${resut[index].disposablepassword}` //별 다른 의미가 없는 content 이다.
+                                                }
+                                            },
+                                            json:true
+                                        });
+                                        doorlockdb.query(`UPDATE smsservice SET opennumber=1, opentime=${date} WHERE createtime=${result[index].createtime}`);
                                     }
                                 }
                             }
