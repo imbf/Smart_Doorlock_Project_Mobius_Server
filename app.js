@@ -41,7 +41,8 @@ var doorlockdb = mysql.createConnection({
     user: 'root',
     password: '1111',
     database: 'doorlockdb',
-    timezone:'UTC+9'
+    timezone:'UTC+9',
+    dateStrings: 'date', 
 })
 require('moment-timezone');
 moment.tz.setDefault("Asia/Seoul");
