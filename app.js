@@ -1258,10 +1258,8 @@ function lookup_create(request, response) {
                             }
                         });
                         doorlockdb.query(`select * from smsservice where activetime<='${date}' and unactivetime>='${date}' and opennumber=0`,function(error,result,fields){
-                            console.log(result);
                             if(result[0]!=undefined){
                                 for(var index in result){
-                                    console.log(result[index].disposablepassword);
                                     if(result[index].disposablepassword == body_Obj.cin.con){
                                         Mrequest({
                                             uri:'http://168.131.35.103:7579/Mobius/lock/update',  
