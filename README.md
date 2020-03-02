@@ -18,6 +18,7 @@ oneM2M IoT Server Platform for Smart Doorlock
 ## Award
 
 제3회 (전자부품연구원)KETI Mobius 2.0 IoT Service Developer Contest에서 전자부품연구원장상(2등상)
+![IMG_7103](https://user-images.githubusercontent.com/47495187/75691751-d6d97e00-5ce7-11ea-8d75-3985aaae88c2.JPG)
 
 ## Smart Doorlock Functionality
 
