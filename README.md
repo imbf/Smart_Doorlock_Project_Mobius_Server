@@ -1,5 +1,5 @@
-# Smart Doorlock Mobius Server Platform
-oneM2M IoT Server Platform을 활용한 스마트 도어락의 서버(IN-CSE)
+# Mobius Server Platform for Smart Doorlock
+oneM2M IoT Server Platform for Smart Doorlock
 
 ## Mobius Version
 2.4.x
@@ -25,9 +25,9 @@ oneM2M IoT Server Platform을 활용한 스마트 도어락의 서버(IN-CSE)
 
 ## Expected effect of smart doorlock
 
-- 집안의 전등과 가스레인지 같은 스마트 도어락에 등록된 가전의 상태를 확인 및 제어 함으로써 **안전 사고 예방을** 도와준다.
+- 집안의 전등 및 가스레인지 같은 스마트 도어락에 등록된 가전의 상태를 확인 및 제어 함으로써 **안전 사고 예방을** 도와준다.
 - 외출 시에 현관문에서 오늘의 날씨 및 미세먼지를 사용자에게 알려주어 옷차림은 알맞게 입었는지 마스크는 꼈는지 등의 외출준비를 도와줍니다. 이로써 **사용자의 번거로움을 없애 삶의 질을 향상**시킵니다.
-- 스마트 도어락의 **특화된 일회용 출입관리 프로세스**를 통해서 집에 잘 없는 사용자들도 안심하고 **홈 서비스를** 받을 수 있도록 도와줍니다.
+- 스마트 도어락의 **특화된 일회용 출입관리 프로세스**를 통해서 집에 없는 사용자들도 안심하고 **홈 서비스를** 받을 수 있도록 도와줍니다.
 
 ## Smart Doorlock System Architecture
 
@@ -58,7 +58,7 @@ oneM2M IoT Server Platform을 활용한 스마트 도어락의 서버(IN-CSE)
 
 Mobius Server(IN-CSE)와 통신하고 Mobius에 등록된 센서(ADN-AE)를 제어할 수 있는 **Doorlock Server(IN-AE)의 코드가 있는 저장소 주소**는 다음과 같습니다. (https://github.com/imbf/Project_doorklock_Server)
 
-oneM2M IoT 표준의 AE(Application Entity)를 C++을 사용하여 구현했으며, MQTT 프로토콜을 사용하여 사물인터넷 서비스 플랫폼(Mobius)와 연결된 **nCube 및 Tas의 코드가 있는 저장소 주소**는 다음과 같습니다. https://github.com/imbf/Project_nCube_ADN
+oneM2M IoT 표준의 AE(Application Entity)를 C++을 사용하여 구현했으며, MQTT 프로토콜을 사용하여 사물인터넷 서비스 플랫폼(Mobius)과 연결된 **nCube 및 Tas의 코드가 있는 저장소 주소**는 다음과 같습니다. https://github.com/imbf/Project_nCube_ADN
 
 ## Installation
 The Mobius is based on Node.js framework and uses MySQL for database.
