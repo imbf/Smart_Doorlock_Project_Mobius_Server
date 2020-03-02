@@ -56,9 +56,9 @@ oneM2M IoT Server Platform을 활용한 스마트 도어락의 서버(IN-CSE)
 
 ## Doorlock Server & (nCube & Tas)
 
-Mobius Server(IN-CSE)와 통신하고 Mobius Server에 등록된 센서(ADN-AE)를 제어할 수 있는 **Doorlock Server(IN-AE)의 코드가 있는 저장소 주소**는 다음과 같습니다  https://github.com/imbf/Project_doorklock_Server
+Mobius Server(IN-CSE)와 통신하고 Mobius에 등록된 센서(ADN-AE)를 제어할 수 있는 **Doorlock Server(IN-AE)의 코드가 있는 저장소 주소**는 다음과 같습니다. (https://github.com/imbf/Project_doorklock_Server)
 
-oneM2M IoT 표준의 AE(Application Entity)를 구현한 것이며, 개발 언어는 C++이고, MQTT 프로토콜을 사용하여 사물인터넷 서비스 플랫폼(Mobius)와 연결된 **nCube 및 Tas의 코드가 있는 저장소 주소**는 다음과 같습니다. https://github.com/imbf/Project_nCube_ADN
+oneM2M IoT 표준의 AE(Application Entity)를 C++을 사용하여 구현했으며, MQTT 프로토콜을 사용하여 사물인터넷 서비스 플랫폼(Mobius)와 연결된 **nCube 및 Tas의 코드가 있는 저장소 주소**는 다음과 같습니다. https://github.com/imbf/Project_nCube_ADN
 
 ## Installation
 The Mobius is based on Node.js framework and uses MySQL for database.
@@ -68,46 +68,16 @@ The Mobius is based on Node.js framework and uses MySQL for database.
 
 - [MySQL Server](https://www.mysql.com/downloads/)<br/>
 The MySQL is an open source RDB database so that it is free and ligth. And RDB is very suitable for storing tree data just like oneM2M resource stucture. Most of nCube-Rosemary will work in a restricted hardware environment and the MySQL can work in most of embeded devices.
-
 - [Node.js](https://nodejs.org/en/)<br/>
 Node.js® is a JavaScript runtime built on Chrome's V8 JavaScript engine. Node.js uses an event-driven, non-blocking I/O model that makes it lightweight and efficient. Node.js' package ecosystem, npm, is the largest ecosystem of open source libraries in the world. Node.js is very powerful in service impelementation because it provide a rich and free web service API. So, we use it to make RESTful API base on the oneM2M standard.
-
 - [Mosquitto](https://mosquitto.org/)<br/>
 Eclipse Mosquitto™ is an open source (EPL/EDL licensed) message broker that implements the MQTT protocol versions 3.1 and 3.1.1. MQTT provides a lightweight method of carrying out messaging using a publish/subscribe model. This makes it suitable for "Internet of Things" messaging such as with low power sensors or mobile devices such as phones, embedded computers or microcontrollers like the Arduino.
-
 - [Mobius](https://github.com/IoTKETI/Mobius/archive/master.zip)<br/>
 Mobius source codes are written in javascript. So they don't need any compilation or installation before running.
 
-## Mobius Docker Version
-We deploy Mobius as a Docker image using the virtualization open source tool Docker.
-
-- [Mobius_Docker](https://github.com/IoTKETI/Mobius_Docker)<br/>
-
-## Configuration
-- Import SQL script<br/>
-After installation of MySQL server, you need the DB Schema for storing oneM2M resources in Mobius. You can find this file in the following Mobius source directory.
-```
-[Mobius home]/mobius/mobiusdb.sql
-```
-- Run Mosquitto MQTT broker<br/>
-```
-mosquitto -v
-```
-- Open the Mobius source home directory
-- Install dependent libraries as below
-```
-npm install
-```
-- Modify the configuration file "conf.json" per your setting
-```
-{
-  "csebaseport": "7579", //Mobius HTTP hosting  port
-  "dbpass": "*******"    //MySQL root password
-}
-```
-
 ## Run
-Use node.js application execution command as below
+
+아래와 같은 명령어를 입력해서 Node.js 어플리케이션을 실행하세요.
 ```
 node mobius.js
 ```
@@ -117,7 +87,7 @@ node mobius.js
 </div><br/>
 
 ## Library Dependencies
-This is the list of library dependencies for Mobius 
+Mobius를 위한 라이브러리 의존성은 다음과 같습니다.
 - body-parser
 - cbor
 - coap
@@ -140,6 +110,3 @@ This is the list of library dependencies for Mobius
 - websocket
 - xml2js
 - xmlbuilder
-
-## Document
-If you want more details please download the full [installation guide document](https://github.com/IoTKETI/Mobius/raw/master/doc/Installation%20Guide_Mobius_v2.0.0_EN(170718).pdf)
