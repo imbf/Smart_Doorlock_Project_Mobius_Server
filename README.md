@@ -15,6 +15,10 @@ oneM2M IoT Server Platform for Smart Doorlock
 
 **2019.04 ~ 2019.10.11**
 
+## Award
+
+제3회 (전자부품연구원)KETI Mobius 2.0 IoT Service Developer Contest에서 전자부품연구원장상(2등상)
+
 ## Smart Doorlock Functionality
 
 - **사용자의 스마트폰에 입력된 메모를 표시하는 기능**
