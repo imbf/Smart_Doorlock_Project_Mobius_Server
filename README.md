@@ -65,11 +65,11 @@ oneM2M IoT Server Platform for Smart Doorlock
 - Wifi dongle
 - ...
 
-## Doorlock Server & (nCube & Tas)
+## Doorlock Server Repository& (nCube & Tas)  Repository
 
-Mobius Server(IN-CSE)와 통신하고 Mobius에 등록된 센서(ADN-AE)를 제어할 수 있는 **Doorlock Server(IN-AE)의 코드가 있는 저장소 주소**는 다음과 같습니다. (https://github.com/imbf/Project_doorklock_Server)
+Mobius Server(IN-CSE)와 통신하고 Mobius에 등록된 센서(ADN-AE)를 제어할 수 있는 **Doorlock Server(IN-AE)의 코드가 있는 저장소 주소**는 다음과 같습니다. (https://github.com/imbf/Smart_Doorlock_Project_Doorlock_Server)
 
-oneM2M IoT 표준의 AE(Application Entity)를 C++을 사용하여 구현했으며, MQTT 프로토콜을 사용하여 사물인터넷 서비스 플랫폼(Mobius)과 연결된 **nCube 및 Tas의 코드가 있는 저장소 주소**는 다음과 같습니다. https://github.com/imbf/Project_nCube_ADN
+oneM2M IoT 표준의 AE(Application Entity)를 C++을 사용하여 구현했으며, MQTT 프로토콜을 사용하여 사물인터넷 서비스 플랫폼(Mobius)과 연결된 **nCube 및 Tas의 코드가 있는 저장소 주소**는 다음과 같습니다. (https://github.com/imbf/Smart_Doorlock_Project_nCube_ADN)
 
 ## Installation
 The Mobius is based on Node.js framework and uses MySQL for database.
