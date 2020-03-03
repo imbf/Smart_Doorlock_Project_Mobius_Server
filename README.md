@@ -11,6 +11,12 @@ oneM2M IoT Server Platform for Smart Doorlock
 
 <img width="964" alt="스마트도어락 사진" src="https://user-images.githubusercontent.com/47495187/75683405-66783000-5cda-11ea-84b5-a8f3e89a70cf.png">
 
+## Development Team (KAB)
+
+**CNU-Econovation 17기 배종진** : Doorlock 및 Mobius 서버 개발, Doorlock Client 개발
+
+**CNU-Econovation 17기 김양하** : nCube & TAS(Doorlock, LED Group, Keypad) 개발
+
 ## Development Period
 
 **2019.04 ~ 2019.10.11**
