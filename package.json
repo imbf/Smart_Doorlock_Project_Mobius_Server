@@ -16,7 +16,7 @@
     "js2xmlparser": "^3.0.0",
     "merge": "^1.2.1",
     "moment": "^2.24.0",
-    "moment-timezone": "^0.5.26",
+    "moment-timezone": "^0.5.35",
     "morgan": "^1.9.1",
     "mqtt": "^2.18.8",
     "mysql": "^2.16.0",
